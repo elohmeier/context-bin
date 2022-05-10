@@ -29,16 +29,48 @@
               ${final.rsync}/bin/rsync -rpztlv "''${GARDENRSYNC}/''${module}/" ./tex/texmf-modules/; \
           done
         '';
+
+        context-bin = final.stdenvNoCC.mkDerivation rec {
+          pname = "context-bin";
+          version = "dev";
+
+          src = ./.;
+
+          nativeBuildInputs = [ final.makeWrapper ];
+
+          # you can add custom fonts by copying them into the tex/texmf-fonts directory, e.g.
+          # cp ${./fonts/consola.ttf} tex/texmf-fonts/consola.ttf
+          buildPhase = ''
+            mkdir -p tex/texmf-fonts
+            # add your fonts here
+
+            patchelf --set-interpreter $(cat ${final.stdenv.cc}/nix-support/dynamic-linker) tex/texmf-linux-64/bin/{luametatex,luatex}
+
+            ./tex/texmf-linux-64/bin/mtxrun --generate
+            ./tex/texmf-linux-64/bin/mtxrun --script cache --erase
+            ./tex/texmf-linux-64/bin/mtxrun --generate
+            ./tex/texmf-linux-64/bin/mtxrun --make en
+          '';
+
+          installPhase = ''
+            mkdir -p $out/share/
+            cp -r tex $out/share/
+            makeWrapper $out/share/tex/texmf-linux-64/bin/context $out/bin/context
+            makeWrapper $out/share/tex/texmf-linux-64/bin/luatex $out/bin/luatex
+            makeWrapper $out/share/tex/texmf-linux-64/bin/luametatex $out/bin/luametatex
+            makeWrapper $out/share/tex/texmf-linux-64/bin/mtxrun $out/bin/mtxrun
+          '';
+        };
       };
 
       defaultPackage = forAllSystems (system: (import nixpkgs {
         inherit system;
         overlays = [ self.overlay ];
-      }).update-context);
+      }).context-bin);
 
       packages = forAllSystems (system: with import nixpkgs
         {
           inherit system; overlays = [ self.overlay ];
-        };{ inherit update-context; });
+        };{ inherit context-bin update-context; });
     };
 }
