@@ -1,0 +1,128 @@
+%D \module
+%D   [       file=m-tikz,
+%D        version=2021.07.12,
+%D          title=\CONTEXT\ Extra Modules,
+%D       subtitle=TIKZ support,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+%D A fixed variant of the t-tikz module distributed with tikz. For practical reasons
+%D per 2021 we split the module for \MKIV\ and \LMTX. (Maybe some day I'll optimize
+%D TIKZ a bit.)
+%D
+%D All these t-* modules in the tikz distribution make no sense as we can just load
+%D them here which is way cleaner. There is also some mkii filename mapping going on
+%D that is not needed on todays systems (windows has no 8.3 limitation and on unix
+%D tds finally adopted a case insensitive approach.)
+
+%D Just in case someone does a hard input ...
+
+\ifdefined\pgfdefined    \endinput \fi
+\ifdefined\pgfcoredefined\endinput \fi
+
+%D ... but normally we end up here:
+
+\startmodule[tikz]
+
+\ifdefined\pdflastxpos \else
+    \unprotect
+        \frozen\overloaded\protected\def\pdflastxpos{\numexpr\clf_lastxpos\relax}
+        \frozen\overloaded\protected\def\pdflastypos{\numexpr\clf_lastypos\relax}
+    \protect
+\fi
+
+\permanent\protected\def\starttikzinput
+  {\pushoverloadmode
+   \pushcatcodetable
+   \setcatcodetable\texcatcodes
+   \catcode`\@=11
+   \catcode`\|=12
+   \catcode`\!=12
+   \autoparagraphmode\zerocount}
+
+\permanent\protected\def\stoptikzinput
+  {\autoparagraphmode\plusone
+   \popcatcodetable
+   \popoverloadmode}
+
+\permanent\protected\def\tikzinputfile#1%
+  {\starttikzinput
+   \input{#1}\relax
+   \stoptikzinput}
+
+\permanent\protected\def\tikzerrormessage#1#2#3%
+  {\writestatus{#1}{#2}}
+
+% For now we need this but we need to educate the user to wrap settings in the
+% wrappers. So some day the next line will go. I need to check what commands are
+% possible outside a picture.
+
+\overloadmode\zerocount
+
+\permanent\protected\def\starttikzsettings
+  {\pushoverloadmode
+   \autoparagraphmode\zerocount}
+
+\permanent\protected\def\stoptikzsettings
+  {\autoparagraphmode\plusone
+   \popoverloadmode}
+
+\permanent\protected\def\starttikzpicture
+  {\dontleavehmode
+   \hcontainer\bgroup
+   \autoparagraphmode\zerocount
+ % \pushoverloadmode
+   \ifdefined\PackageError\else \let\PackageError\tikzerrormessage \fi
+   \tikzpicture}
+
+\permanent\protected\def\stoptikzpicture
+  {\endtikzpicture
+ % \popoverloadmode
+   \egroup}
+
+\let\pgfdefined    \relax
+\let\pgfcoredefined\relax
+
+\tikzinputfile{pgfutil-common.tex}
+\tikzinputfile{pgfutil-context.def}
+\tikzinputfile{pgfrcs.code.tex}
+\tikzinputfile{pgfsys.code.tex}
+\tikzinputfile{pgfkeys.code.tex}
+\tikzinputfile{pgfsyssoftpath.code.tex}
+\tikzinputfile{pgfsysprotocol.code.tex}
+\tikzinputfile{pgfcore.code.tex}
+\tikzinputfile{pgffor.code.tex}
+\tikzinputfile{pgfmoduleplot.code.tex}
+\tikzinputfile{tikz.code.tex}
+
+\let\startpgfpicture             \pgfpicture              \let\stoppgfpicture            \endpgfpicture
+\let\startpgfscope               \pgfscope                \let\stoppgfscope              \endpgfscope
+\let\startpgflowlevelscope       \pgflowlevelscope        \let\stoppgflowlevelscope      \endpgflowlevelscope
+\let\startpgfinterruptpath       \pgfinterruptpath        \let\stoppgfinterruptpath      \endpgfinterruptpath
+\let\startpgfinterruptpicture    \pgfinterruptpicture     \let\stoppgfinterruptpicture   \endpgfinterruptpicture
+\let\startpgfinterruptboundingbox\pgfinterruptboundinbox  \let\stoppgfinterruptboudingbox\endpgfinterruptboundingbox
+
+\let\normalusepgfmodule\usepgfmodule
+\let\normalusepgflibrary\usepgflibrary
+
+\tolerant\protected\def\usepgfmodule[#1]#;#2% somehow both variants are used
+  {\starttikzinput
+   \normalusepgfmodule[#1#2]%
+   \stoptikzinput}
+
+\tolerant\protected\def\usepgflibrary[#1]#;#2% somehow both variants are used
+  {\starttikzinput
+   \normalusepgflibrary[#1#2]%
+   \stoptikzinput}
+
+\usepgfmodule[shapes]
+\usepgfmodule[plot]
+\usepgfmodule[matrix]
+\usepgfmodule[decorations]
+
+\stopmodule

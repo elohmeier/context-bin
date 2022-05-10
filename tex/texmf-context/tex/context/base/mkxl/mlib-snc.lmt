@@ -1,0 +1,36 @@
+if not modules then modules = { } end modules ['mlib-snc'] = {
+    version   = 1.001,
+    comment   = "companion to anch-snc.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local scanners       = mp.scan
+local scaninteger    = scanners.integer
+local scanstring     = scanners.string
+local factor         = number.dimenfactors.bp
+local synchronizers  = graphics.synchronizers
+local registerdirect = metapost.registerdirect
+
+-- no need for locals (yet)
+
+registerdirect("asnc_collect", function()
+    return synchronizers.collect(scaninteger(),scaninteger(),scanstring()) -- category realpage region
+end)
+
+registerdirect("asnc_extend",   synchronizers.extend  )
+registerdirect("asnc_prune",    synchronizers.prune   )
+registerdirect("asnc_collapse", synchronizers.collapse)
+registerdirect("asnc_getsize",  synchronizers.getsize )
+
+registerdirect("asnc_gettop",   function() return synchronizers.gettop   (scaninteger()) * factor end)
+registerdirect("asnc_getbottom",function() return synchronizers.getbottom(scaninteger()) * factor end)
+registerdirect("asnc_getkind",  function() return synchronizers.getkind  (scaninteger())          end)
+registerdirect("asnc_gettask",  function() return synchronizers.gettask  (scaninteger())          end)
+
+registerdirect("asnc_getx",     function() return synchronizers.getx() * factor end)
+registerdirect("asnc_gety",     function() return synchronizers.gety() * factor end)
+registerdirect("asnc_getw",     function() return synchronizers.getw() * factor end)
+registerdirect("asnc_geth",     function() return synchronizers.geth() * factor end)
+registerdirect("asnc_getd",     function() return synchronizers.getd() * factor end)

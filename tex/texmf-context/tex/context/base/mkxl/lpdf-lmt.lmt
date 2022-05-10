@@ -1,0 +1,3434 @@
+if not modules then modules = { } end modules ['lpdf-lmt'] = {
+    version   = 1.001,
+    optimize  = true,
+    comment   = "companion to lpdf-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+-- The code below was originally in back-lpd.lua but it makes more sense in this
+-- namespace. I will rename variables.
+
+-- There is no way that a lua based backend can compete performance wise with the
+-- original one for relative simple text runs. And we're talking seconds here on say
+-- 500 pages with paragraphs alternativng between three fonts and colors. But such
+-- documents are rare so in practice we are quite okay, especially because in
+-- ConTeXt we can gain quite a bit elsewhere. So, when we loose 30% on such simple
+-- documents, we break even on for instance the manual, and gain 30% on Thomas's
+-- turture test (also for other reasons). But .. who knows what magic I can cook up
+-- in due time.
+
+-- If you consider this complex, watch:
+--
+-- https://www.youtube.com/watch?v=6H-cAzfB2qo
+--
+-- or in distractionmode:
+--
+-- https://www.youtube.com/watch?v=TYuTE_1jvvE
+-- https://www.youtube.com/watch?v=nnicGKX3lvM
+--
+-- For the moment we have to support the built in backend as well as the alternative. So
+-- the next interface is suboptimal and will change at some time. At that moment I will
+-- also optimize and extend.
+
+local type, next, unpack, tonumber, rawget = type, next, unpack, tonumber, rawget
+local char, rep, find = string.char, string.rep, string.find
+local formatters, splitupstring = string.formatters, string.splitup
+local concat, sortedhash = table.concat, table.sortedhash
+local setmetatableindex = table.setmetatableindex
+local loaddata = io.loaddata
+
+local bpfactor               = number.dimenfactors.bp
+
+local osuuid                 = os.uuid
+local zlibcompresssize       = xzip.compresssize
+
+local nuts                   = nodes.nuts
+local tonut                  = nodes.tonut
+local tonode                 = nuts.tonode
+
+local pdfreference           = lpdf.reference
+local pdfdictionary          = lpdf.dictionary
+local pdfarray               = lpdf.array
+local pdfconstant            = lpdf.constant
+local pdfliteral             = lpdf.literal -- not to be confused with a whatsit!
+
+local pdfreserveobject       -- forward reference
+local pdfpagereference       -- forward reference
+local pdfgetpagereference    -- forward reference
+local pdfsharedobject        -- forward reference
+local pdfflushobject         -- forward reference
+local pdfflushstreamobject   -- forward reference
+local pdfdeferredobject      -- forward reference
+local pdfimmediateobject     -- forward reference
+
+local pdfincludeimage        -- forward reference
+
+local pdf_pages         = pdfconstant("Pages")
+local pdf_page          = pdfconstant("Page")
+local pdf_xobject       = pdfconstant("XObject")
+local pdf_form          = pdfconstant("Form")
+local pdf_pattern       = pdfconstant("Pattern")
+
+local fonthashes        = fonts.hashes
+local characters        = fonthashes.characters
+local descriptions      = fonthashes.descriptions
+local parameters        = fonthashes.parameters
+local properties        = fonthashes.properties
+
+local report            = logs.reporter("backend")
+local report_objects    = logs.reporter("backend","objects")
+local report_fonts      = logs.reporter("backend","fonts")
+local report_encryption = logs.reporter("backend","encryption")
+
+local trace_objects     = false  trackers.register("backend.objects",       function(v) trace_objects = v end)
+local trace_details     = false  trackers.register("backend.details",       function(v) trace_details = v end)
+local trace_indices     = false  trackers.register("backend.fonts.details", function(v) trace_indices = v end)
+
+-- These two tables used a font id as index and will be metatabled in lpdf-emb.lmt:
+
+local usedfontnames     = { }
+local usedfontobjects   = { }
+
+lpdf.usedfontnames      = usedfontnames
+lpdf.usedfontobjects    = usedfontobjects
+
+-- experiment:
+
+local function compressdata(data,size)
+    local guess = ((size // 4096) + 1) * 2048
+    local comp  = zlibcompresssize(data,guess,3)
+ -- if comp then
+ --     report()
+ --     report("size %i, guess %i, result %i => %s / %s",size,guess,#comp,guess>=#comp and "hit" or "miss")
+ --     report()
+ -- end
+    return comp
+end
+
+-- local function compressdata(data,size)
+--     return zlibcompress(data,3)
+-- end
+
+-- we collect them:
+
+local flushers = { }
+
+-- used variables
+
+local pdf_h = 0
+local pdf_v = 0
+
+local need_tm, need_tf, need_font, cur_tmrx, cur_factor
+local need_width, need_mode, done_width, done_mode
+local mode
+local f_pdf_cur, f_pdf, fs_cur, fs, f_cur, f_x_scale, f_y_scale
+local tj_delta, cw
+local usedfonts, usedxforms, usedximages, usedxgroups
+local getxformname, getximagename
+local boundingbox, shippingmode, objectnumber
+local tmrx, tmry, tmsx, tmsy, tmtx, tmty
+local cmrx, cmry, cmsx, cmsy, cmtx, cmty
+local tmef
+
+local function usefont(t,k) -- a bit redundant hash
+ -- local v = pdfgetfontname(k)
+    local v = usedfontnames[k]
+    t[k] = v
+    return v
+end
+
+local function reset_variables(specification)
+    pdf_h, pdf_v  = 0, 0
+    cmrx, cmry    = 1.0, 1.0
+    cmsx, cmsy    = 0.0, 0.0
+    cmtx, cmty    = 0.0, 0.0
+    tmrx, tmry    = 1.0, 1.0
+    tmsx, tmsy    = 0.0, 0.0
+    tmtx, tmty    = 0.0, 0.0
+    tmef          = 1.0
+    need_tm       = false
+    need_tf       = false
+    need_font     = true
+    need_width    = 0
+    need_mode     = 0
+    done_width    = false
+    done_mode     = false
+    mode          = "page"
+    shippingmode  = specification.shippingmode
+    objectnumber  = specification.objectnumber
+    cur_tmrx      = 0.0
+    f_cur         = 0
+    f_pdf_cur     = 0 -- nullfont
+    f_pdf         = 0 -- nullfont
+    fs_cur        = 0
+    fs            = 0
+    f_x_scale     = 1.0
+    f_y_scale     = 1.0
+    cur_factor    = 0
+    tj_delta      = 0.0
+    cw            = 0.0
+    usedfonts     = setmetatableindex(usefont)
+    usedxforms    = { }
+    usedximages   = { }
+ -- usedxgroups   = { }
+    boundingbox   = specification.boundingbox
+end
+
+-- buffer
+
+local buffer = lua.newtable(1024,0) -- { }
+local b      = 0
+
+local function reset_buffer()
+    b = 0
+end
+
+-- fonts
+
+local fontcharacters
+----- fontdescriptions
+local fontparameters
+local fontproperties
+local pdfcharacters
+
+local getstreamhash = fonts.handlers.otf.getstreamhash
+
+local usedfontstreams = { }
+
+local usedindices = setmetatableindex(function(t,k)
+    local n = 0
+    local v = setmetatableindex(function(tt,kk)
+        if n >= 0xFFFF then
+            report_fonts("registering character index: overflow in hash %a, todo: use overflow font")
+        else
+            n = n + 1
+        end
+        if trace_indices then
+            report_fonts("registering character index: hash %a, charindex 0x%05X, slotindex 0x%04X",k,kk,n)
+        end
+        local vv = n
+        tt[kk] = vv
+        return vv
+    end)
+    t[k] = v
+    return v
+end)
+
+local usedcharacters = setmetatableindex(function(t,k)
+    local h, d = getstreamhash(k)
+    if trace_indices then
+        report_fonts("registering index table: hash %a, fontid %i",h,k)
+    end
+    usedfontstreams[h] = d
+    local v = usedindices[h]
+    t[k] = v
+    return v
+end)
+
+lpdf.usedfontstreams = usedfontstreams -- [streamhash]        -> fontdata
+lpdf.usedcharacters  = usedcharacters  -- [fontid]            -> indices
+lpdf.usedindices     = usedindices     -- [streamhash][index] -> realindex (can also be dupindex)
+
+local horizontalmode = true
+local scalefactor    = 1
+local threshold      = 655360
+local thresfactor    = 100
+local tjfactor       = 100 / 65536
+
+function flushers.updatefontstate(font)
+    fontcharacters   = characters[font]
+ -- fontdescriptions = descriptions[font]
+    fontparameters   = parameters[font]
+    fontproperties   = properties[font]
+    local size       = fontparameters.size -- or bad news
+    local designsize = fontparameters.designsize or size
+    pdfcharacters    = usedcharacters[font]
+    horizontalmode   = fontparameters.writingmode ~= "vertical"
+    scalefactor      = (designsize/size) * tjfactor
+    --
+    local fthreshold = fontproperties.threshold
+    threshold        = (fthreshold and (size * fthreshold / 100)) or 655360
+    -- when we bolden the threshold should be smaller .. a hack .. i need to redo all this
+    if (fontparameters.extendfactor or 1) == 1 then
+        -- we're probably okay
+    elseif fontparameters.hshift or fontparameters.vshift then
+        -- we could be okay
+    else
+        -- some vf magic going on
+        threshold = threshold / 5
+    end
+end
+
+-- helpers (maybe in collapse mode we have to go %.9N)
+
+local f_cm = formatters["%.6N %.6N %.6N %.6N %.6N %.6N cm"]
+local f_tm = formatters["%.6N %.6N %.6N %.6N %.6N %.6N Tm"]
+
+local saved_text_pos_v = 0
+local saved_text_pos_h = 0
+
+local function begin_text()
+    saved_text_pos_h = pdf_h
+    saved_text_pos_v = pdf_v
+    b = b + 1 ; buffer[b] = "BT"
+    need_tf    = true
+    need_font  = true
+    need_width = 0
+    need_mode  = 0
+    mode       = "text"
+end
+
+local function end_text()
+    if done_width then
+        b = b + 1 ; buffer[b] = "0 w"
+        done_width = false
+    end
+    if done_mode then
+        b = b + 1 ; buffer[b] = "0 Tr"
+        done_mode = false
+    end
+    b = b + 1 ; buffer[b] = "ET"
+    pdf_h = saved_text_pos_h
+    pdf_v = saved_text_pos_v
+    mode  = "page"
+end
+
+local saved_chararray_pos_h
+local saved_chararray_pos_v
+
+local saved_b = 0
+
+local function begin_chararray()
+    saved_chararray_pos_h = pdf_h
+    saved_chararray_pos_v = pdf_v
+    cw = horizontalmode and saved_chararray_pos_h or - saved_chararray_pos_v
+    tj_delta = 0
+    saved_b = b
+    b = b + 1 ; buffer[b] = " ["
+    mode = "chararray"
+end
+
+local function end_chararray()
+    b = b + 1 ; buffer[b] = "] TJ"
+    buffer[saved_b] = concat(buffer,"",saved_b,b)
+    b = saved_b
+    pdf_h = saved_chararray_pos_h
+    pdf_v = saved_chararray_pos_v
+    mode  = "text"
+end
+
+local function begin_charmode()
+    b = b + 1 ; buffer[b] = "<"
+    mode = "char"
+end
+
+local function end_charmode()
+    b = b + 1 ; buffer[b] = ">"
+    mode = "chararray"
+end
+
+local function calc_pdfpos(h,v)
+    -- mostly char
+    if mode == "page" then
+        cmtx = h - pdf_h
+        cmty = v - pdf_v
+        return h ~= pdf_h or v ~= pdf_v
+    elseif mode == "text" then
+        tmtx = h - saved_text_pos_h
+        tmty = v - saved_text_pos_v
+        return h ~= pdf_h or v ~= pdf_v
+    elseif horizontalmode then
+        tmty = v - saved_text_pos_v
+        tj_delta = cw - h
+        return tj_delta ~= 0 or v ~= pdf_v
+    else
+        tmtx = h - saved_text_pos_h
+        tj_delta = cw + v
+        return tj_delta ~= 0 or h ~= pdf_h
+    end
+end
+
+local function pdf_set_pos(h,v)
+    local move = calc_pdfpos(h,v)
+    if move then
+        b = b + 1 ; buffer[b] = f_cm(cmrx, cmsx, cmsy, cmry, cmtx*bpfactor, cmty*bpfactor)
+        pdf_h = pdf_h + cmtx
+        pdf_v = pdf_v + cmty
+    end
+end
+
+local function pdf_reset_pos()
+    if mode == "page" then
+        cmtx = - pdf_h
+        cmty = - pdf_v
+        if pdf_h == 0 and pdf_v == 0 then
+            return
+        end
+    elseif mode == "text" then
+        tmtx = - saved_text_pos_h
+        tmty = - saved_text_pos_v
+        if pdf_h == 0 and pdf_v == 0 then
+            return
+        end
+    elseif horizontalmode then
+        tmty = - saved_text_pos_v
+        tj_delta = cw
+        if tj_delta == 0 and pdf_v == 0 then
+            return
+        end
+    else
+        tmtx = - saved_text_pos_h
+        tj_delta = cw
+        if tj_delta == 0 and pdf_h == 0 then
+            return
+        end
+    end
+    b = b + 1 ; buffer[b] = f_cm(cmrx, cmsx, cmsy, cmry, cmtx*bpfactor, cmty*bpfactor)
+    pdf_h = pdf_h + cmtx
+    pdf_v = pdf_v + cmty
+end
+
+local function pdf_set_pos_temp(h,v)
+    local move = calc_pdfpos(h,v)
+    if move then
+        b = b + 1 ; buffer[b] = f_cm(cmrx, cmsx, cmsy, cmry, cmtx*bpfactor, cmty*bpfactor)
+    end
+end
+
+-- these dummy returns makes using them a bit faster
+
+local function pdf_end_string_nl()
+    if mode == "char" then
+        end_charmode()
+        return end_chararray()
+    elseif mode == "chararray" then
+        return end_chararray()
+    end
+end
+
+local function pdf_goto_textmode()
+    if mode == "page" then
+        pdf_reset_pos()
+        return begin_text()
+    elseif mode ~= "text" then
+        if mode == "char" then
+            end_charmode()
+            return end_chararray()
+        else -- if mode == "chararray" then
+            return end_chararray()
+        end
+    end
+end
+
+local function pdf_goto_pagemode()
+    if mode ~= "page" then
+        if mode == "char" then
+            end_charmode()
+            end_chararray()
+            return end_text()
+        elseif mode == "chararray" then
+            end_chararray()
+            return end_text()
+        elseif mode == "text" then
+            return end_text()
+        end
+    end
+end
+
+local function pdf_goto_fontmode()
+    if mode == "char" then
+        end_charmode()
+        end_chararray()
+        end_text()
+    elseif mode == "chararray" then
+        end_chararray()
+        end_text()
+    elseif mode == "text" then
+        end_text()
+    end
+    pdf_reset_pos()
+    mode = "page"
+end
+
+-- characters
+do
+
+    local round = math.round
+
+    -- across pages ... todo: clean up because we don't need to pass the font
+    -- as fontparameters already has checked / set it we can also have a variable
+    -- for it so
+
+    local characterwidth   = nil
+ -- local descriptionwidth = nil
+    local hshift           = false
+    local vshift           = false
+
+    -- The width array uses the original dimensions! This is different from e.g.
+    -- luatex where we have more widths arrays and these reflect the cheated
+    -- widths (goes wrong elsewhere).
+
+    -- when changing this, check math: compact-001.tex (rule width)
+
+    local characterwidths = setmetatableindex(function(t,font)
+        local d = descriptions[font]
+        local c = characters[font]
+        local f = parameters[font].hfactor or parameters[font].factor
+        local v = setmetatableindex(function(t,char)
+            local w
+            local e = c and c[char]
+            if e then
+--                 w = e.width or 0
+--                 local a = e.advance
+--                 if a then
+--                     w = a
+--                 end
+                local a = e.advance
+                if a then
+                    w = a
+                else
+                    w = e.width or 0
+                end
+            end
+            if not w then
+                e = d and d[char]
+                if e then
+                    w = e.width
+                    if w then
+                        w =  w * f
+                    end
+                end
+            end
+            if not w then
+                w = 0
+            end
+            t[char] = w
+            return w
+        end)
+        t[font] = v
+        return v
+    end)
+
+    -- it's about time to get rid of the pdftex based model but i'll wait with that till after
+    -- the first release so that we have some test period ... when we go compact even less
+
+    -- the descriptions are used for the width array
+
+    local collapse = true
+
+    experiments.register("backend.pdf.collapsefonts",function(v)
+        collapse = v
+    end)
+
+    local function setup_fontparameters(font,factor,sx,sy)
+        local slant   = fontparameters.slantfactor   or 0
+        local extend  = fontparameters.extendfactor  or 1
+        local squeeze = fontparameters.squeezefactor or 1
+        local expand  = 1 + factor / 1000000
+        local format  = fontproperties.format
+        tmef       = expand
+        tmrx       = expand * extend
+        tmsy       = slant
+        tmry       = squeeze
+        need_width = fontparameters.width or 0
+        need_mode  = fontparameters.mode or 0
+        f_cur      = font
+        f_pdf      = usedfonts[font] -- cache
+        cur_factor = factor
+        tj_delta   = 0
+        cw         = 0
+        --
+        fs = fontparameters.size * bpfactor
+        if collapse then
+            local sc = fs / 10
+            -- kind of special:
+            if format == "opentype" or format == "type1" then
+                sc = sc * 1000 / fontparameters.units -- can we avoid this ?
+            end
+            --
+            fs = 10
+            --
+            tmrx = tmrx * sc
+            tmry = tmry * sc
+        else
+            -- kind of special:
+            if format == "opentype" or format == "type1" then
+                fs = fs * 1000 / fontparameters.units -- can we avoid this ?
+            end
+        end
+        --
+        f_x_scale = sx
+        if f_x_scale ~= 1.0 then
+            tmrx = tmrx * f_x_scale
+        end
+        f_y_scale = sy
+        if f_y_scale ~= 1.0 then
+            tmry = tmry * f_y_scale
+        end
+        --
+        characterwidth   = characterwidths[font]
+     -- descriptionwidth = descriptionwidths[font]
+        --
+        hshift = fontparameters.hshift
+        vshift = fontparameters.vshift
+    end
+
+    local f_width = formatters["%.6N w"]
+    local f_mode  = formatters["%i Tr"]        -- can be hash
+    local f_font  = formatters["/F%i %.6N Tf"] -- can be hash
+
+    local s_width = "0 w"
+    local s_mode  = "0 Tr"
+
+    local width_factor = 72.27 / 72000.0
+
+    local last_fs
+    local last_fpdf
+
+    local function set_font()
+     -- if need_width and need_width ~= 0 then
+        if need_width ~= 0 then
+            b = b + 1 ; buffer[b] = f_width(width_factor*need_width)
+            done_width = true
+        elseif done_width then
+            b = b + 1 ; buffer[b] = s_width
+            done_width = false
+        end
+     -- if need_mode and need_mode ~= 0 then
+        if need_mode ~= 0 then
+            b = b + 1 ; buffer[b] = f_mode(need_mode)
+            done_mode = true
+        elseif done_mode then
+            b = b + 1 ; buffer[b] = s_mode
+            done_mode = false
+        end
+        -- no need when the same
+        if need_font or last_fs ~= fs or last_pdf ~= f_pdf then
+            b = b + 1 ; buffer[b] = f_font(f_pdf,fs)
+            last_fs   = fs
+            last_pdf  = f_pdf
+            need_font = false
+        end
+        f_pdf_cur = f_pdf
+        fs_cur    = fs
+        need_tf   = false
+        need_tm   = true
+    end
+
+    local function set_textmatrix(h,v)
+       local move = calc_pdfpos(h,v)
+       if need_tm or move then
+            b = b + 1 ; buffer[b] = f_tm(tmrx, tmsx, tmsy, tmry, tmtx*bpfactor, tmty*bpfactor)
+            pdf_h = saved_text_pos_h + tmtx
+            pdf_v = saved_text_pos_v + tmty
+            need_tm = false
+        end
+        cur_tmrx = tmrx
+    end
+
+    local f_hex_4 = formatters["%04X"]
+    local f_hex_2 = formatters["%02X"]
+
+    local h_hex_4 = setmetatableindex(function(t,k) -- we already have this somewhere
+        if k < 256 then -- maybe 512
+            -- not sparse in this range
+            for i=0,255 do
+                t[i] = f_hex_4(i)
+            end
+            return t[k]
+        else
+            local v = f_hex_4(k)
+            t[k] = v
+            return v
+        end
+    end)
+    local h_hex_2 = setmetatableindex(function(t,k) -- we already have this somewhere
+        local v = k < 256 and f_hex_2(k) or "00"
+        t[k] = v
+        return v
+    end)
+
+    local trace_threshold = false  trackers.register("backends.pdf.threshold", function(v) trace_threshold = v end)
+
+ -- local f_skip = formatters["%.2N"]
+
+    -- I will redo this mess ... we no longer have the mkiv pdf generator that we used in
+    -- luatex (a precursor to lmtx and also for comparison) but only in lmtx now so ...
+    -- time to move on I guess.
+
+    -- factor is for hz
+
+    flushers.character = function(current,pos_h,pos_v,pos_r,font,char,data,csx,csy,factor,sx,sy) -- ,naturalwidth,width)
+
+        local s = data.scale
+        local x = data.xoffset
+        local y = data.yoffset
+
+        if s then
+            sx = s * sx
+            sy = s * sy
+        end
+        if csx then
+            sx = sx * csx
+            csx = 1
+        end
+        if csy then
+            sy = sy * csy
+            csy = 1
+        end
+
+     -- if sx ~= f_x_scale or sy ~= f_y_scale or need_tf or font ~= f_cur or f_pdf ~= f_pdf_cur or fs ~= fs_cur then
+        if sx ~= f_x_scale or sy ~= f_y_scale or need_tf or font ~= f_cur or f_pdf ~= f_pdf_cur or fs ~= fs_cur or mode == "page" then
+            pdf_goto_textmode()
+            setup_fontparameters(font,factor,sx,sy) -- too often due to page
+            set_font()
+     -- elseif mode == "page" then
+     --     pdf_goto_textmode()
+     --     set_font()
+        elseif cur_tmrx ~= tmrx or cur_factor ~= factor then
+            setup_fontparameters(font,factor,sx,sy)
+            need_tm = true
+        end
+
+        if x then
+            pos_h = pos_h + x * tmef * f_x_scale
+        end
+        if y then
+            pos_v = pos_v + y * f_y_scale
+        end
+
+        local move = calc_pdfpos(pos_h,pos_v)
+
+        if trace_threshold then
+            report_fonts(
+                "before: font %i, char %C, factor %i, naturalwidth %p, move %l, tm %l, hpos %p, delta %p, threshold %p, cw %p",
+                font,char,factor,characterwidth[char],move,need_tm,pos_h,tj_delta,threshold,cw
+            )
+        end
+
+        if move or need_tm then
+            if not need_tm then
+                if horizontalmode then
+                    if (saved_text_pos_v + tmty) ~= pdf_v then
+                        need_tm = true
+                    elseif tj_delta >= threshold or tj_delta <= -threshold then
+                        need_tm = true
+                    end
+                else
+                    if (saved_text_pos_h + tmtx) ~= pdf_h then
+                        need_tm = true
+                    elseif tj_delta >= threshold or tj_delta <= -threshold then
+                        need_tm = true
+                    end
+                end
+            end
+
+            if hshift then pos_h = pos_h + hshift end
+            if vshift then pos_v = pos_v - vshift end
+            if need_tm then
+                pdf_goto_textmode()
+                set_textmatrix(pos_h,pos_v)
+                begin_chararray()
+                move = calc_pdfpos(pos_h,pos_v)
+            end
+            if move then
+                local d = tj_delta * scalefactor / f_x_scale
+                if d <= -0.5 or d >= 0.5 then
+                    if mode == "char" then
+                        end_charmode()
+                    end
+                    b = b + 1 ; buffer[b] = round(d) -- or f_skip(d)
+                end
+                cw = cw - tj_delta
+            end
+        end
+
+        if trace_threshold then
+            report_fonts(
+                 "after : font %i, char %C, factor %i, naturalwidth %p, move %l, tm %l, hpos %p, delta %p, threshold %p, cw %p",
+                 font,char,factor,characterwidth[char],move,need_tm,pos_h,tj_delta,threshold,cw
+             )
+        end
+
+        if mode == "chararray" then
+            begin_charmode()
+        end
+
+        cw = cw + characterwidth[char] * tmef * f_x_scale
+
+        local slot = pdfcharacters[data.index or char] -- registers usage
+
+        b = b + 1 ; buffer[b] = font > 0 and h_hex_4[slot] or h_hex_2[slot]
+
+    end
+
+    flushers.fontchar = function(font,char,data)
+        local dummy = usedfonts[font]
+        local slot  = pdfcharacters[data.index or char] -- registers usage
+        return dummy
+    end
+
+end
+
+-- literals
+
+local flushliteral  do
+
+    local nodeproperties      = nodes.properties.data
+    local literalvalues       = nodes.literalvalues
+
+    local originliteral_code  = literalvalues.origin
+    local pageliteral_code    = literalvalues.page
+    local alwaysliteral_code  = literalvalues.always
+    local rawliteral_code     = literalvalues.raw
+    local textliteral_code    = literalvalues.text
+    local fontliteral_code    = literalvalues.font
+
+    flushliteral = function(current,pos_h,pos_v)
+        local p = nodeproperties[current]
+        if p then
+            local str = p.data
+            if str and str ~= "" then
+                local mode = p.mode
+                if mode == originliteral_code then
+                    pdf_goto_pagemode()
+                    pdf_set_pos(pos_h,pos_v)
+                elseif mode == pageliteral_code then
+                    pdf_goto_pagemode()
+                elseif mode == textliteral_code then
+                    pdf_goto_textmode()
+                elseif mode == fontliteral_code then
+                    pdf_goto_fontmode()
+                elseif mode == alwaysliteral_code then -- aka direct
+                    pdf_end_string_nl()
+                    need_tm = true
+                elseif mode == rawliteral_code then
+                    pdf_end_string_nl()
+                else
+                    report("invalid literal mode %a when flushing %a",mode,str)
+                    return
+                end
+                b = b + 1 ; buffer[b] = str
+            end
+        end
+    end
+
+    flushers.literal = flushliteral
+
+    function lpdf.print(mode,str)
+        -- This only works inside objects, don't change this to flush
+        -- in between. It's different from luatex but okay.
+        if str then
+            mode = literalvalues[mode]
+        else
+            mode, str = originliteral_code, mode
+        end
+        if str and str ~= "" then
+            if mode == originliteral_code then
+                pdf_goto_pagemode()
+             -- pdf_set_pos(pdf_h,pdf_v)
+            elseif mode == pageliteral_code then
+                pdf_goto_pagemode()
+            elseif mode == textliteral_code then
+                pdf_goto_textmode()
+            elseif mode == fontliteral_code then
+                pdf_goto_fontmode()
+            elseif mode == alwaysliteral_code then
+                pdf_end_string_nl()
+                need_tm = true
+            elseif mode == rawliteral_code then
+                pdf_end_string_nl()
+            else
+                report("invalid literal mode %a when flushing %a",mode,str)
+                return
+            end
+            b = b + 1 ; buffer[b] = str
+        end
+    end
+
+end
+
+-- grouping & orientation
+
+do
+
+    local matrices     = { }
+    local positions    = { }
+    local nofpositions = 0
+    local nofmatrices  = 0
+
+    local flushsave = function(current,pos_h,pos_v)
+        nofpositions = nofpositions + 1
+        positions[nofpositions] = { pos_h, pos_v, nofmatrices }
+        pdf_goto_pagemode()
+        pdf_set_pos(pos_h,pos_v)
+        b = b + 1 ; buffer[b] = "q"
+    end
+
+    local flushrestore = function(current,pos_h,pos_v)
+        if nofpositions < 1 then
+            return
+        end
+        local t = positions[nofpositions]
+     -- local h = pos_h - t[1]
+     -- local v = pos_v - t[2]
+        if shippingmode == "page" then
+            nofmatrices = t[3]
+        end
+        pdf_goto_pagemode()
+        pdf_set_pos(pos_h,pos_v)
+        b = b + 1 ; buffer[b] = "Q"
+        nofpositions = nofpositions - 1
+    end
+
+    local nodeproperties = nodes.properties.data
+
+    local s_matrix_0 <const> = "1 0 0 1 0 0 cm"
+    local f_matrix_2         = formatters["%.6N 0 0 %.6N 0 0 cm"]
+    local f_matrix_4         = formatters["%.6N %.6N %.6N %.6N 0 0 cm"]
+
+    local flushsetmatrix = function(current,pos_h,pos_v)
+        local p = nodeproperties[current]
+        if p then
+            local m = p.matrix
+            if m then
+                local rx, sx, sy, ry = unpack(m)
+                local s
+                if not rx then
+                    rx = 1
+                elseif rx == 0 then
+                    rx = 0.0001
+                end
+                if not ry then
+                    ry = 1
+                elseif ry == 0 then
+                    ry = 0.0001
+                end
+                if not sx then
+                    sx = 0
+                end
+                if not sy then
+                    sy = 0
+                end
+                --
+                if sx == 0 and sy == 0 then
+                    if rx == 1 and ry == 1 then
+                        s = s_matrix_0
+                    else
+                        s = f_matrix_2(rx,ry)
+                    end
+                else
+                    s = f_matrix_4(rx,sx,sy,ry)
+                end
+                --
+                if shippingmode == "page" then
+                    local tx = pos_h * (1 - rx) - pos_v * sy
+                    local ty = pos_v * (1 - ry) - pos_h * sx
+                    if nofmatrices > 0 then
+                        local t = matrices[nofmatrices]
+                        local r_x, s_x, s_y, r_y, te, tf = t[1], t[2], t[3], t[4], t[5], t[6]
+                        rx, sx = rx * r_x + sx * s_y, rx * s_x + sx * r_y
+                        sy, ry = sy * r_x + ry * s_y, sy * s_x + ry * r_y
+                        tx, ty = tx * r_x + ty * s_y, tx * s_x + ty * r_y
+                    end
+                    nofmatrices = nofmatrices + 1
+                    matrices[nofmatrices] = { rx, sx, sy, ry, tx, ty }
+                end
+                --
+                pdf_goto_pagemode()
+                pdf_set_pos(pos_h,pos_v)
+                --
+                b = b + 1
+                buffer[b] = s
+            end
+        end
+    end
+
+    flushers.setmatrix = flushsetmatrix
+    flushers.save      = flushsave
+    flushers.restore   = flushrestore
+
+    function lpdf.hasmatrix()
+        return nofmatrices > 0
+    end
+
+    function lpdf.getmatrix()
+        if nofmatrices > 0 then
+            return unpack(matrices[nofmatrices])
+        else
+            return 1, 0, 0, 1, 0, 0
+        end
+    end
+
+    flushers.pushorientation = function(orientation,pos_h,pos_v,pos_r)
+        pdf_goto_pagemode()
+        pdf_set_pos(pos_h,pos_v)
+        b = b + 1 ; buffer[b] = "q"
+        if orientation == 1 then
+            b = b + 1 ; buffer[b] = "0 -1 1 0 0 0 cm"  --  90
+        elseif orientation == 2 then
+            b = b + 1 ; buffer[b] = "-1 0 0 -1 0 0 cm" -- 180
+        elseif orientation == 3 then
+            b = b + 1 ; buffer[b] = "0 1 -1 0 0 0 cm"  -- 270
+        end
+    end
+
+    flushers.poporientation = function(orientation,pos_h,pos_v,pos_r)
+        pdf_goto_pagemode()
+        pdf_set_pos(pos_h,pos_v)
+        b = b + 1 ; buffer[b] = "Q"
+    end
+
+    --
+
+    flushers.startmatrix = function(current,pos_h,pos_v)
+        flushsave(current,pos_h,pos_v)
+        flushsetmatrix(current,pos_h,pos_v)
+    end
+
+    flushers.stopmatrix = function(current,pos_h,pos_v)
+        flushrestore(current,pos_h,pos_v)
+    end
+
+    flushers.startscaling = function(current,pos_h,pos_v)
+        flushsave(current,pos_h,pos_v)
+        flushsetmatrix(current,pos_h,pos_v)
+    end
+
+    flushers.stopscaling = function(current,pos_h,pos_v)
+        flushrestore(current,pos_h,pos_v)
+    end
+
+    flushers.startrotation = function(current,pos_h,pos_v)
+        flushsave(current,pos_h,pos_v)
+        flushsetmatrix(current,pos_h,pos_v)
+    end
+
+    flushers.stoprotation = function(current,pos_h,pos_v)
+        flushrestore(current,pos_h,pos_v)
+    end
+
+    flushers.startmirroring = function(current,pos_h,pos_v)
+        flushsave(current,pos_h,pos_v)
+        flushsetmatrix(current,pos_h,pos_v)
+    end
+
+    flushers.stopmirroring = function(current,pos_h,pos_v)
+        flushrestore(current,pos_h,pos_v)
+    end
+
+    flushers.startclipping = function(current,pos_h,pos_v)
+        flushsave(current,pos_h,pos_v)
+     -- lpdf.print("origin",formatters["0 w %s W n"](nodeproperties[current].path))
+        pdf_goto_pagemode()
+        b = b + 1 ; buffer[b] = formatters["0 w %s W n"](nodeproperties[current].path)
+    end
+
+    flushers.stopclipping = function(current,pos_h,pos_v)
+        flushrestore(current,pos_h,pos_v)
+    end
+
+end
+
+do
+
+    local nodeproperties = nodes.properties.data
+
+    flushers.setstate = function(current,pos_h,pos_v)
+        local p = nodeproperties[current]
+        if p then
+            local d = p.data
+            if d and d ~= "" then
+                pdf_goto_pagemode()
+                b = b + 1 ; buffer[b] = d
+            end
+        end
+    end
+
+end
+
+-- rules
+
+local flushedxforms  = { } -- actually box resources but can also be direct
+local localconverter = nil -- will be set
+
+local flushimage  do
+
+    local pdfbackend        = backends.registered.pdf
+    local nodeinjections    = pdfbackend.nodeinjections
+    local codeinjections    = pdfbackend.codeinjections
+
+    local newimagerule      = nuts.pool.imagerule
+    local newboxrule        = nuts.pool.boxrule
+
+    local setprop           = nuts.setprop
+    local getprop           = nuts.getprop
+    local setattrlist       = nuts.setattrlist
+
+    local getwhd            = nuts.getwhd
+    local flushlist         = nuts.flushlist
+    local getdata           = nuts.getdata
+
+    local rulecodes         = nodes.rulecodes
+    local normalrule_code   = rulecodes.normal
+    local boxrule_code      = rulecodes.box
+    local imagerule_code    = rulecodes.image
+    local emptyrule_code    = rulecodes.empty
+    local userrule_code     = rulecodes.user
+    local overrule_code     = rulecodes.over
+    local underrule_code    = rulecodes.under
+    local fractionrule_code = rulecodes.fraction
+    local radicalrule_code  = rulecodes.radical
+    local outlinerule_code  = rulecodes.outline
+
+    local processrule       = nodes.rules.process
+
+    local f_fm = formatters["/Fm%d Do"]
+    local f_im = formatters["/Im%d Do"]
+    local f_gr = formatters["/Gp%d Do"]
+
+    local s_b <const> = "q"
+    local s_e <const> = "Q"
+
+    local f_v  = formatters["[] 0 d 0 J %.6N w 0 0 m %.6N 0 l S"]
+    local f_h  = formatters["[] 0 d 0 J %.6N w 0 0 m 0 %.6N l S"]
+
+    local f_f  = formatters["0 0 %.6N %.6N re f"]
+    local f_o  = formatters["[] 0 d 0 J 0 0 %.6N %.6N re S"]
+    local f_w  = formatters["[] 0 d 0 J %.6N w 0 0 %.6N %.6N re S"]
+
+    local f_b  = formatters["%.6N w 0 %.6N %.6N %.6N re f"]
+    local f_x  = formatters["[] 0 d 0 J %.6N w %.6N %.6N %.6N %.6N re S"]
+    local f_y  = formatters["[] 0 d 0 J %.6N w %.6N %.6N %.6N %.6N re S %.6N 0 m %.6N 0 l S"]
+
+    -- Historically the index is an object which is kind of bad.
+
+    local boxresources, n = { }, 0
+
+    getxformname = function(index)
+        local l = boxresources[index]
+        if l then
+            return l.name
+        else
+            report("no box resource %S",index)
+        end
+    end
+
+    lpdf.getxformname = getxformname
+
+    local pdfcollectedresources = lpdf.collectedresources
+
+    function codeinjections.saveboxresource(box,attributes,resources,immediate,kind,margin)
+        n = n + 1
+        local immediate = true
+        local margin    = margin or 0 -- or dimension
+        local objnum    = pdfreserveobject()
+        local list      = tonut(type(box) == "number" and tex.takebox(box) or box)
+        --
+        if resources == true then
+            resources = pdfcollectedresources()
+        end
+        --
+        local width, height, depth = getwhd(list)
+        --
+        local l = {
+            width      = width,
+            height     = height,
+            depth      = depth,
+            margin     = margin,
+            attributes = attributes,
+            resources  = resources,
+            list       = nil,
+            type       = kind,
+            name       = n,
+            index      = objnum,
+            objnum     = objnum,
+        }
+        boxresources[objnum] = l
+        if immediate then
+            localconverter(list,"xform",objnum,l)
+            flushedxforms[objnum] = { true , objnum }
+            flushlist(list)
+        else
+            l.list = list
+        end
+        return objnum
+    end
+
+    function nodeinjections.useboxresource(index,wd,ht,dp)
+        local l = boxresources[index]
+        if l then
+            if wd or ht or dp then
+                wd, ht, dp = wd or 0, ht or 0, dp or 0
+            else
+                wd, ht, dp = l.width, l.height, l.depth
+            end
+            local rule = newboxrule(wd,ht,dp)
+            setattrlist(rule,true)
+            setprop(rule,"index",index)
+            return tonode(rule), wd, ht, dp
+        else
+            report("no box resource %S",index)
+        end
+    end
+
+    local function getboxresourcedimensions(index)
+        local l = boxresources[index]
+        if l then
+            return l.width, l.height, l.depth, l.margin
+        else
+            report("no box resource %S",index)
+        end
+    end
+
+    nodeinjections.getboxresourcedimensions = getboxresourcedimensions
+
+    function codeinjections.getboxresourcebox(index)
+        local l = boxresources[index]
+        if l then
+            return l.list
+        end
+    end
+
+    -- a bit of a mess: index is now objnum but that has to change to a proper index
+    -- ... an engine inheritance
+
+    local function flushpdfxform(current,pos_h,pos_v,pos_r,size_h,size_v)
+        -- object properties
+        local objnum = getprop(current,"index")
+        local name   = getxformname(objnum)
+        local info   = flushedxforms[objnum]
+        local r      = boxresources[objnum]
+        if not info then
+            info = { false , objnum }
+            flushedxforms[objnum] = info
+        end
+        local wd, ht, dp = getboxresourcedimensions(objnum)
+     -- or:   wd, ht, dp = r.width, r.height, r.depth
+        -- sanity check
+        local htdp = ht + dp
+        if wd == 0 or size_h == 0 or htdp == 0 or size_v == 0 then
+            return
+        end
+        -- calculate scale
+        local rx, ry = 1, 1
+        if wd ~= size_h or htdp ~= size_v then
+            rx = size_h / wd
+            ry = size_v / htdp
+        end
+        -- flush the reference
+        usedxforms[objnum] = true
+        pdf_goto_pagemode()
+        calc_pdfpos(pos_h,pos_v)
+        tx = cmtx * bpfactor
+        ty = cmty * bpfactor
+        b = b + 1 ; buffer[b] = s_b
+        b = b + 1 ; buffer[b] = f_cm(rx,0,0,ry,tx,ty)
+        b = b + 1 ; buffer[b] = f_fm(name)
+        b = b + 1 ; buffer[b] = s_e
+    end
+
+    -- place image also used in vf but we can use a different one if we need it
+
+    local imagetypes     = images.types -- pdf png jpg jp2 jbig2 stream
+    local img_none       = imagetypes.none
+    local img_pdf        = imagetypes.pdf
+    local img_stream     = imagetypes.stream
+
+    local one_bp = 65536 * bpfactor
+
+    local imageresources, n = { }, 0
+
+    getximagename = function(index) -- not used
+        local l = imageresources[index]
+        if l then
+            return l.name
+        else
+            report("no image resource %S",index)
+        end
+    end
+
+    -- Groups are flushed immediately but we can decide to make them into a
+    -- specific whatsit ... but not now. We could hash them if needed when
+    -- we use lot sof them in mp ... but not now.
+
+          usedxgroups = { }
+    local groups      = 0
+    local group       = nil
+
+    local flushgroup = function(content,bbox)
+        if not group then
+            group = pdfdictionary {
+                Type = pdfconstant("Group"),
+                S    = pdfconstant("Transparency"),
+            }
+        end
+        local wrapper = pdfdictionary {
+            Type      = pdf_xobject,
+            Subtype   = pdf_form,
+            FormType  = 1,
+            Group     = group,
+            BBox      = pdfarray(bbox),
+            Resources = lpdf.collectedresources { serialize = false },
+        }
+        local objnum = pdfflushstreamobject(content,wrapper,false) -- why not compressed ?
+        groups = groups + 1
+        usedxgroups[groups] = objnum
+        return f_gr(groups)
+    end
+
+    flushers.group  = flushgroup
+    lpdf.flushgroup = flushgroup -- todo: access via driver in mlib-pps
+
+    -- end of experiment
+
+    local function flushpdfximage(current,pos_h,pos_v,pos_r,size_h,size_v)
+
+        local width,
+              height,
+              depth     = getwhd(current)
+        local total     = height + depth
+        local transform = getprop(current,"transform") or 0  -- we never set it ... so just use rotation then
+        local index     = getprop(current,"index") or 0
+        local kind,
+              xorigin,
+              yorigin,
+              xsize,
+              ysize,
+              rotation, -- transform / orientation / rotation : it's a mess (i need to redo this)
+              objnum,
+              groupref  = pdfincludeimage(index)  -- needs to be sorted out, bad name (no longer mixed anyway)
+
+        if not kind then
+            report("invalid image %S",index)
+            return
+        end
+
+        local rx, sx, sy, ry, tx, ty = 1, 0, 0, 1, 0, 0
+
+        -- tricky: xsize and ysize swapped
+
+        if kind == img_pdf or kind == img_stream then
+            rx, ry, tx, ty = 1/xsize, 1/ysize, xorigin/xsize, yorigin/ysize
+        else
+         -- if kind == img_png then
+         --  -- if groupref > 0 and img_page_group_val == 0 then
+         --  --     img_page_group_val = groupref
+         --  -- end
+         -- end
+            rx, ry = bpfactor, bpfactor
+        end
+
+        if (transform & 7) > 3 then
+            -- mirror
+            rx, tx = -rx, -tx
+        end
+        local t = (transform + rotation) & 3
+        if t == 0 then
+            -- nothing
+        elseif t == 1 then
+            -- rotation over 90 degrees (counterclockwise)
+            rx, sx, sy, ry, tx, ty = 0, rx, -ry, 0, -ty, tx
+        elseif t == 2 then
+            -- rotation over 180 degrees (counterclockwise)
+            rx, ry, tx, ty = -rx, -ry, -tx, -ty
+        elseif t == 3 then
+            -- rotation over 270 degrees (counterclockwise)
+            rx, sx, sy, ry, tx, ty = 0, -rx, ry, 0, ty, -tx
+        end
+
+        rx = rx * width
+        sx = sx * total
+        sy = sy * width
+        ry = ry * total
+        tx = pos_h - tx * width
+        ty = pos_v - ty * total
+
+        local t = transform + rotation
+
+        if (transform & 7) > 3 then
+            t = t + 1
+        end
+
+        t = t & 3
+
+        if t == 0 then
+            -- no transform
+        elseif t == 1 then
+            -- rotation over 90 degrees (counterclockwise)
+            tx = tx + width
+        elseif t == 2 then
+            -- rotation over 180 degrees (counterclockwise)
+            tx = tx + width
+            ty = ty + total
+        elseif t == 3 then
+            -- rotation over 270 degrees (counterclockwise)
+            ty = ty + total
+        end
+
+     -- a flaw in original, can go:
+     --
+     -- if img_page_group_val == 0 then
+     --     img_page_group_val = group_ref
+     -- end
+
+        usedximages[index] = objnum -- hm
+
+        pdf_goto_pagemode()
+
+        calc_pdfpos(tx,ty)
+
+        tx = cmtx * bpfactor
+        ty = cmty * bpfactor
+
+        b = b + 1 ; buffer[b] = s_b
+        b = b + 1 ; buffer[b] = f_cm(rx,sx,sy,ry,tx,ty)
+        b = b + 1 ; buffer[b] = f_im(index)
+        b = b + 1 ; buffer[b] = s_e
+    end
+
+    flushimage = function(index,width,height,depth,pos_h,pos_v)
+
+        -- used in vf characters
+
+        local total = height + depth
+        local kind,
+              xorigin, yorigin,
+              xsize, ysize,
+              rotation,
+              objnum,
+              groupref = pdfincludeimage(index)
+
+        local rx = width / xsize
+        local sx = 0
+        local sy = 0
+        local ry = total / ysize
+        local tx = pos_h
+        -- to be sorted out
+     -- local ty = pos_v - depth
+        local ty = pos_v -- we assume that depth is dealt with in the caller (for now)
+
+        usedximages[index] = objnum
+
+        pdf_goto_pagemode()
+
+        calc_pdfpos(tx,ty)
+
+        tx = cmtx * bpfactor
+        ty = cmty * bpfactor
+
+        b = b + 1 ; buffer[b] = s_b
+        b = b + 1 ; buffer[b] = f_cm(rx,sx,sy,ry,tx,ty)
+        b = b + 1 ; buffer[b] = f_im(index)
+        b = b + 1 ; buffer[b] = s_e
+    end
+
+    flushers.image = flushimage
+
+    -- For the moment we need this hack because the engine checks the 'image'
+    -- command in virtual fonts (so we use lua instead).
+    --
+    -- These will be replaced by a new more advanced one ... some day ... or
+    -- never because the next are like the other engines and compensate for
+    -- small sizes which is needed for inaccurate viewers.
+
+    flushers.rule = function(current,pos_h,pos_v,pos_r,size_h,size_v,subtype)
+        if subtype == emptyrule_code then
+            return
+        elseif subtype == boxrule_code then
+            return flushpdfxform(current,pos_h,pos_v,pos_r,size_h,size_v)
+        elseif subtype == imagerule_code then
+            return flushpdfximage(current,pos_h,pos_v,pos_r,size_h,size_v)
+        elseif subtype == userrule_code or (subtype >= overrule_code and subtype <= radicalrule_code) then
+            pdf_goto_pagemode()
+            b = b + 1 ; buffer[b] = s_b
+            pdf_set_pos_temp(pos_h,pos_v)
+            processrule(current,size_h,size_v,pos_r) -- so we pass direction
+            b = b + 1 ; buffer[b] = s_e
+            return
+        end
+
+        pdf_goto_pagemode()
+
+     -- local saved_b = b
+
+        b = b + 1 ; buffer[b] = s_b
+
+        local dim_h = size_h * bpfactor
+        local dim_v = size_v * bpfactor
+        local rule
+
+        if dim_v <= one_bp then
+            pdf_set_pos_temp(pos_h,pos_v + 0.5 * size_v)
+            rule = f_v(dim_v,dim_h)
+        elseif dim_h <= one_bp then
+            pdf_set_pos_temp(pos_h + 0.5 * size_h,pos_v)
+            rule = f_h(dim_h,dim_v)
+        else
+            pdf_set_pos_temp(pos_h,pos_v)
+            if subtype == outlinerule_code then
+                local linewidth = getdata(current)
+                if linewidth > 0 then
+                    rule = f_w(linewidth * bpfactor,dim_h,dim_v)
+                else
+                    rule = f_o(dim_h,dim_v)
+                end
+            else
+                rule = f_f(dim_h,dim_v)
+            end
+        end
+
+        b = b + 1 ; buffer[b] = rule
+        b = b + 1 ; buffer[b] = s_e
+
+     -- buffer[saved_b] = concat(buffer," ",saved_b,b)
+     -- b = saved_b
+
+    end
+
+    flushers.simplerule = function(pos_h,pos_v,pos_r,size_h,size_v)
+        pdf_goto_pagemode()
+
+        b = b + 1 ; buffer[b] = s_b
+
+        local dim_h = size_h * bpfactor
+        local dim_v = size_v * bpfactor
+        local rule
+
+        if dim_v <= one_bp then
+            pdf_set_pos_temp(pos_h,pos_v + 0.5 * size_v)
+            rule = f_v(dim_v,dim_h)
+        elseif dim_h <= one_bp then
+            pdf_set_pos_temp(pos_h + 0.5 * size_h,pos_v)
+            rule = f_h(dim_h,dim_v)
+        else
+            pdf_set_pos_temp(pos_h,pos_v)
+            rule = f_f(dim_h,dim_v)
+        end
+
+        b = b + 1 ; buffer[b] = rule
+        b = b + 1 ; buffer[b] = s_e
+    end
+
+    flushers.specialrule = function(pos_h,pos_v,pos_r,width,height,depth,line,outline,baseline)
+        pdf_goto_pagemode()
+
+        b = b + 1 ; buffer[b] = s_b
+
+        local width  = bpfactor * width
+        local height = bpfactor * height
+        local depth  = bpfactor * depth
+        local total  = height + depth
+        local line   = bpfactor * line
+        local half   = line / 2
+        local rule
+
+        if outline then
+            local d = -depth + half
+            local w =  width - line
+            local t =  total - line
+            if baseline and w > 0 then
+                rule = f_y(line,half,d,w,t,half,w)
+            else
+                rule = f_x(line,half,d,w,t)
+            end
+        else
+            rule = f_b(line,-depth,width,total)
+        end
+        pdf_set_pos_temp(pos_h,pos_v)
+
+        b = b + 1 ; buffer[b] = rule
+        b = b + 1 ; buffer[b] = s_e
+    end
+
+end
+
+--- basics
+
+local wrapupdocument, registerpage  do
+
+    local pages    = { }
+    local maxkids  = 10
+    local nofpages = 0
+    local pagetag  = "unset"
+
+    registerpage = function(object)
+        nofpages = nofpages + 1
+        local objnum = pdfpagereference(nofpages)
+        pages[nofpages] = {
+            page   = nofpages, -- original number, only for diagnostics
+            objnum = objnum,
+            object = object,
+            tag    = pagetag,
+        }
+    end
+
+    function lpdf.setpagetag(tag)
+        pagetag = tag or "unset"
+    end
+
+    function lpdf.getnofpages()
+        return nofpages
+    end
+
+    function lpdf.getpagetags()
+        local list = { }
+        for i=1,nofpages do
+            list[i] = pages[i].tag
+        end
+        return list
+    end
+
+    function lpdf.setpageorder(mapping)
+        -- mapping can be a hash so:
+        local list = table.sortedkeys(mapping)
+        local n    = #list
+        if n == nofpages then
+            local done = { }
+            local hash = { }
+            for i=1,n do
+                local order = mapping[list[i]]
+                if hash[order] then
+                    report("invalid page order, duplicate entry %i",order)
+                    return
+                elseif order < 1 or order > nofpages then
+                    report("invalid page order, no page %i",order)
+                    return
+                else
+                    done[i]     = pages[order]
+                    hash[order] = true
+                end
+            end
+            pages = done
+        else
+            report("invalid page order, %i entries expected",nofpages)
+        end
+    end
+
+    -- We can have this, but then via codeinjections etc. Later.
+
+ -- function structures.pages.swapthem()
+ --     local n = lpdf.getnofpages()
+ --     local t = { }
+ --     for i=1,n do
+ --         t[i] = i
+ --     end
+ --     for i=2,math.odd(n) and n or (n-1),2 do
+ --         t[i]   = i+1
+ --         t[i+1] = i
+ --     end
+ --     lpdf.setpageorder(t)
+ -- end
+
+    wrapupdocument = function(driver)
+
+        -- hook (to reshuffle pages)
+        local pagetree = { }
+        local parent   = nil
+        local minimum  = 0
+        local maximum  = 0
+        local current  = 0
+        if #pages > 1.5 * maxkids then
+            repeat
+                local plist, pnode
+                if current == 0 then
+                    plist, minimum = pages, 1
+                elseif current == 1 then
+                    plist, minimum = pagetree, 1
+                else
+                    plist, minimum = pagetree, maximum + 1
+                end
+                maximum = #plist
+                if maximum > minimum then
+                    local kids
+                    for i=minimum,maximum do
+                        local p = plist[i]
+                        if not pnode or #kids == maxkids then
+                            kids   = pdfarray()
+                            parent = pdfreserveobject()
+                            pnode  = pdfdictionary {
+                                objnum = parent,
+                                Type   = pdf_pages,
+                                Kids   = kids,
+                                Count  = 0,
+                            }
+                            pagetree[#pagetree+1] = pnode
+                        end
+                        kids[#kids+1] = pdfreference(p.objnum)
+                        pnode.Count = pnode.Count + (p.Count or 1)
+                        p.Parent = pdfreference(parent)
+                    end
+                end
+                current = current + 1
+            until maximum == minimum
+            -- flush page tree
+            for i=1,#pagetree do
+                local entry  = pagetree[i]
+                local objnum = entry.objnum
+                entry.objnum = nil
+                pdfflushobject(objnum,entry)
+            end
+        else
+            -- ugly
+            local kids = pdfarray()
+            local list = pdfdictionary {
+                Type  = pdf_pages,
+                Kids  = kids,
+                Count = nofpages,
+            }
+            parent = pdfreserveobject()
+            for i=1,nofpages do
+                local page = pages[i]
+                kids[#kids+1] = pdfreference(page.objnum)
+                page.Parent = pdfreference(parent)
+            end
+            pdfflushobject(parent,list)
+        end
+        for i=1,nofpages do
+            local page   = pages[i]
+            local object = page.object
+            object.Parent = page.Parent
+            pdfflushobject(page.objnum,object)
+        end
+        lpdf.addtocatalog("Pages",pdfreference(parent))
+    end
+
+end
+
+local function initialize(driver,details)
+    reset_variables(details)
+    reset_buffer()
+end
+
+-- This will all move and be merged and become less messy.
+
+-- todo: more clever resource management: a bit tricky as we can inject
+-- stuff in the page stream
+
+local compact       = false
+local encryptstream = false
+local encryptobject = false
+local encdict       = nil
+local majorversion  = 1
+local minorversion  = 7
+
+-- Encryption
+
+-- This stuff is poorly documented so it took a while to figure out a way that made
+-- loading in a few programe working. Of course one you see the solution one can
+-- claim that it's easy and trivial. In the end we could even make acrobat accepting
+-- the file: it doesn't like the catalog to be in an object stream which to me
+-- smells like a bug.
+
+do
+
+    -- move up (some already) or better: lpdf-aes.lmt or so
+
+    local byte, sub, bytes, tohex, tobytes = string.byte, string.sub, string.bytes, string.tohex, string.tobytes
+    local P, S, V, Cs, lpegmatch, patterns = lpeg.P, lpeg.S, lpeg.V, lpeg.Cs, lpeg.match, lpeg.patterns
+
+    local digest256 = sha2.digest256
+    local digest384 = sha2.digest384
+    local digest512 = sha2.digest512
+
+    local aesencode = aes.encode
+    local aesdecode = aes.decode
+    local aesrandom = aes.random
+
+    -- random and padding functions are gone here
+
+    local function validpassword(str)
+        return #str > 127 and sub(str,1,127) or str
+    end
+
+    local encryptionkey = false
+    local objectparser  = false
+
+    do
+
+        local function ps_encrypt(str)
+            -- string is already unescaped
+            str = aesencode(str,encryptionkey,true,true,true)
+            return "<" .. tohex(str) .. ">"
+        end
+
+        local function hex_encrypt(str)
+            -- string needs to be decoded
+            str = tobytes(str)
+            str = aesencode(str,encryptionkey,true,true,true)
+            return "<" .. tohex(str) .. ">"
+        end
+
+        local whitespace  = S("\000\009\010\012\013\032")^1
+        local anything    = patterns.anything
+        local space       = patterns.space
+        local spacing     = whitespace^0
+        local newline     = patterns.eol
+        local cardinal    = patterns.cardinal
+
+        local p_psstring  = (
+                              P("(")
+                            * Cs(P { ( P("\\")/"" * anything + P("(") * V(1) * P(")") + (1 - P(")")) )^0 })
+                            * P(")")
+                          ) / ps_encrypt
+
+        local p_hexstring = (
+                              P("<")
+                            * Cs((1-P(">"))^1)
+                            * P(">")
+                          ) / hex_encrypt
+
+        local p_comment   = P("%") * (1-newline)^1 * newline^1
+        local p_name      = P("/") * (1 - whitespace - S("<>/[]()"))^1
+        local p_number    = patterns.number
+        local p_boolean   = P("true") + P("false")
+        local p_null      = P("null")
+        local p_reference = cardinal * spacing * cardinal * spacing * P("R")
+
+        local p_other     = p_name + p_reference + p_psstring + p_hexstring + p_number
+                          + p_boolean + p_null + p_comment
+
+        local p_dictionary  = { "dictionary",
+            dictionary = (
+                P("<<")
+              * (spacing * p_name * spacing * V("whatever"))^0
+              * spacing
+              * P(">>")
+            ),
+            array = (
+                P("[")
+              * (spacing * V("whatever"))^0
+              * spacing
+              * P("]")
+            ),
+            whatever = (
+                V("dictionary")
+              + V("array")
+              + p_other
+            ),
+        }
+
+        local p_object = P { "object",
+            dictionary = p_dictionary.dictionary,
+            array      = p_dictionary.array,
+            whatever   = p_dictionary.whatever,
+            object     = spacing * (V("dictionary") + V("array") + p_other)
+        }
+
+     -- local p_object = cardinal
+     --                * spacing
+     --                * cardinal
+     --                * spacing
+     --                * P("obj")
+     --                * p_object
+     --                * P(1)^0
+     --
+     -- objectparser = Cs(p_object^1)
+
+        objectparser = Cs(p_object^1)
+
+    end
+
+    local function makehash(password,salt,userkey)
+        local k = digest256(password .. salt .. (userkey or ""))
+        local n = 0
+        while true do
+            local k1 = rep(password .. k .. (userkey or ""),64)
+            local k2 = sub(k,1,16)
+            local iv = sub(k,17,32)
+            local e = aesencode(k1,k2,iv)
+            local m = 0
+            local i = 1
+            for b in bytes(e) do
+                m = m + b
+                if i == 16 then
+                    break
+                else
+                    i = i + 1
+                end
+            end
+            m = m % 3
+            if m == 0 then
+                k = digest256(e)
+            elseif m == 1 then
+                k = digest384(e)
+            else
+                k = digest512(e)
+            end
+            n = n + 1
+            if n >= 64 and byte(sub(e,-1)) <= (n - 32) then
+                break
+           end
+        end
+        return sub(k,1,32)
+    end
+
+    local options = {
+     -- unknown  = 0x0001, -- bit  1
+     -- unknown  = 0x0002, -- bit  2
+        print    = 0x0004, -- bit  3
+        modify   = 0x0008, -- bit  4
+        extract  = 0x0010, -- bit  5
+        add      = 0x0020, -- bit  6
+     -- unknown  = 0x0040, -- bit  7
+     -- unknown  = 0x0080, -- bit  8
+        fillin   = 0x0100, -- bit  9
+        access   = 0x0200, -- bit 10
+        assemble = 0x0400, -- bit 11
+        quality  = 0x0800, -- bit 12
+     -- unknown  = 0x1000, -- bit 13
+     -- unknown  = 0x2000, -- bit 14
+     -- unknown  = 0x4000, -- bit 15
+     -- unknown  = 0x8000, -- bit 16
+    }
+
+    -- 1111 0000 1100 0011
+
+    local mandate  = 0x0200
+    local defaults = options.print | options.extract | options.quality
+
+    -- majorversion = 2
+    -- minorversion = 0
+
+    function lpdf.setencryption(specification)
+        if not encryptstream then
+            local ownerpassword = specification.ownerpassword
+            local userpassword  = specification.userpassword
+            local optionlist    = specification.permissions
+            if type(ownerpassword) == "string" and ownerpassword ~= "" then
+                --
+                if type(userpassword) ~= "string" then
+                    userpassword = ""
+                end
+                userpassword  = validpassword(userpassword)
+                ownerpassword = validpassword(ownerpassword)
+                --
+                encryptionkey = aesrandom(32) -- used earlier on
+                --
+                local permissions = mandate
+                if optionlist then
+                    optionlist = utilities.parsers.settings_to_array(optionlist)
+                    for i=1,#optionlist do
+                        local p = options[optionlist[i]]
+                        if p then
+                            permissions = permissions | p
+                        end
+                    end
+                else
+                    permissions = permissions | defaults
+                end
+                --
+                permissions = permissions | 0xF0C3 -- needs work
+                --
+                optionlist = { }
+                for k, v in table.sortedhash(options) do
+                    if permissions & v == v then
+                        optionlist[#optionlist+1] = k
+                    end
+                end
+                --
+                local uservalidationsalt  = aesrandom(8)
+                local userkeysalt         = aesrandom(8)
+                local userhash            = makehash(userpassword,uservalidationsalt)
+                local userkey             = userhash .. uservalidationsalt .. userkeysalt -- U
+                local userintermediate    = makehash(userpassword,userkeysalt)
+                local useraes             = aesencode(encryptionkey,userintermediate) -- UE
+                --
+                local ownervalidationsalt = aesrandom(8)
+                local ownerkeysalt        = aesrandom(8)
+                local ownerhash           = makehash(ownerpassword,ownervalidationsalt,userkey)
+                local ownerkey            = ownerhash .. ownervalidationsalt .. ownerkeysalt -- O
+                local ownerintermediate   = makehash(ownerpassword,ownerkeysalt,userkey)
+                local owneraes            = aesencode(encryptionkey,ownerintermediate) -- OE
+                --
+                -- still not ok test in qpdf
+                --
+                local permissionsstring   = sio.tocardinal4(0xFFFFFFFF)
+                                         .. sio.tocardinal4(permissions)
+                                         .. "T" -- EncryptMetadata
+                                         .. "adb"
+                                         .. aesrandom(4)
+                local permissionsaes      = aesencode(permissionsstring,encryptionkey)
+                --
+                permissionsaes = tohex(permissionsaes)
+                userkey        = tohex(userkey)
+                ownerkey       = tohex(ownerkey)
+                useraes        = tohex(useraes)
+                owneraes       = tohex(owneraes)
+                --
+                encdict  = pdfdictionary {
+                    Filter = pdfconstant("Standard"),
+                    V      = 5,   -- variant
+                    R      = 6,   -- revision
+                    Length = 256, -- not needed
+                    StmF   = pdfconstant("StdCF"),
+                    StrF   = pdfconstant("StdCF"),
+                    P      = permissions,
+                    Perms  = pdfliteral(permissionsaes,true), -- #16
+                    U      = pdfliteral(userkey,       true), -- #48
+                    O      = pdfliteral(ownerkey,      true), -- #48
+                    UE     = pdfliteral(useraes,       true), -- #32
+                    OE     = pdfliteral(owneraes,      true), -- #32
+                    CF     = {
+                        StdCF = {
+                            AuthEvent = pdfconstant("DocOpen"),
+                            CFM       = pdfconstant("AESV3"),
+                            Length    = 32, -- #encryptionkey
+                        }
+                    },
+                    -- bonus
+                    EncryptMetadata = true,
+                }
+                --
+                encryptstream = function(str)
+                    return aesencode(str,encryptionkey,true,true,true) -- random-iv add-iv add-padding
+                end
+                encryptobject = function(obj)
+                    if obj then
+                        if type(obj) == "table" then
+                            obj = obj()
+                        end
+                        return lpegmatch(objectparser,obj) or obj
+                    end
+                end
+                --
+                report_encryption("stream objects get encrypted")
+                if not objectstream then
+                    report_encryption("strings are not encrypted, enable object streams")
+                end
+                report_encryption("permissions: % t",optionlist)
+                if userpassword == "" then
+                    report_encryption("no user password")
+                end
+                --
+            end
+        end
+    end
+
+    backends.registered.pdf.codeinjections.setencryption = lpdf.setencryption
+
+end
+
+do
+
+    -- This is more a convenience feature and it might even be not entirely robust.
+    -- It removes redundant color directives which makes the page stream look a bit
+    -- nicer (also when figuring out issues). I might add more here but there is
+    -- some additional overhead involved so runtime can be impacted.
+
+    local P, R, S, Cs, lpegmatch = lpeg.P, lpeg.R, lpeg.S, lpeg.Cs, lpeg.match
+
+    local p_ds    = (R("09") + S(" ."))^1
+    ----- p_nl    = S("\n\r")^1
+    local p_nl    = S("\n")^1
+    local p_eg    = P("Q")
+
+    local p_cl    = p_ds * (P("rg") + P("g") + P("k")) * p_ds * (P("RG") + P("G") + P("K"))
+    ----- p_cl    = (p_ds * (P("rg") + P("g") + P("k") + P("RG") + P("G") + P("K")))^1
+    local p_tr    = P("/Tr") * p_ds * P("gs")
+
+    local p_no_cl = (p_cl * p_nl) / ""
+    local p_no_tr = (p_tr * p_nl) / ""
+    local p_no_nl = 1 - p_nl
+
+    local p_do_cl = p_cl * p_nl
+    local p_do_tr = p_tr * p_nl
+
+    local p_do_eg = p_eg * p_nl
+
+    local pattern = Cs( (
+        (p_no_cl + p_no_tr)^0 * p_do_eg           -- transparencies and colors before Q
+      +  p_no_tr * p_no_cl    * p_do_tr * p_do_cl -- transparencies and colors before others
+      +  p_no_cl              * p_do_cl           -- successive colors
+      +  p_no_tr              * p_do_tr           -- successive transparencies
+      +  p_no_nl^1
+      +  1
+    )^1 )
+
+    local oldsize = 0
+    local newsize = 0
+
+    directives.register("pdf.compact", function(v)
+        compact = v and function(s)
+            oldsize = oldsize + #s
+            s = lpegmatch(pattern,s) or s
+            newsize = newsize + #s
+            return s
+        end
+    end)
+
+    statistics.register("pdf pagestream",function()
+        if oldsize ~= newsize then
+            return string.format("old size: %i, new size %i",oldsize,newsize)
+        end
+    end)
+
+end
+
+local flushdeferred -- defined later
+
+local level = 0
+
+local finalize  do
+
+    local f_font  = formatters["F%d"]
+
+    local f_form  = formatters["Fm%d"]
+    local f_group = formatters["Gp%d"]
+    local f_image = formatters["Im%d"]
+
+    finalize = function(driver,details)
+
+        level = level + 1
+
+        pdf_goto_pagemode() -- for now
+
+        local objnum        = details.objnum
+        local specification = details.specification
+
+        local content = concat(buffer,"\n",1,b)
+
+        if compact then
+            content = compact(content)
+        end
+
+        local fonts   = nil
+        local xforms  = nil
+
+        if next(usedfonts) then
+            fonts = pdfdictionary { }
+            for k, v in next, usedfonts do
+--                 fonts[f_font(v)] = pdfreference(pdfgetfontobjectnumber(k)) -- we can overload for testing
+                fonts[f_font(v)] = pdfreference(usedfontobjects[k]) -- we can overload for testing
+            end
+        end
+
+        -- messy: use real indexes for both ... so we need to change some in the
+        -- full luatex part
+
+        if next(usedxforms) or next(usedximages) or next(usedxgroups) then
+            xforms = pdfdictionary { }
+            for k in sortedhash(usedxforms) do
+                xforms[f_form(getxformname(k))] = pdfreference(k)
+            end
+            for k, v in sortedhash(usedximages) do
+                xforms[f_image(k)] = pdfreference(v)
+            end
+            for k, v in sortedhash(usedxgroups) do
+                xforms[f_group(k)] = pdfreference(v)
+            end
+        end
+
+        reset_buffer()
+
+     -- finish_pdfpage_callback(shippingmode == "page")
+
+        if shippingmode == "page" then
+
+            local pageproperties  = lpdf.getpageproperties()
+
+            local pageresources   = pageproperties.pageresources
+            local pageattributes  = pageproperties.pageattributes
+            local pagesattributes = pageproperties.pagesattributes
+
+            pageresources.Font    = fonts
+            pageresources.XObject = xforms
+            pageresources.ProcSet = lpdf.procset()
+
+            local bbox = pdfarray {
+                boundingbox[1] * bpfactor,
+                boundingbox[2] * bpfactor,
+                boundingbox[3] * bpfactor,
+                boundingbox[4] * bpfactor,
+            }
+
+            local contentsobj = pdfflushstreamobject(content,false,true)
+
+            pageattributes.Type      = pdf_page
+            pageattributes.Contents  = pdfreference(contentsobj)
+            pageattributes.Resources = pageresources
+         -- pageattributes.Resources = pdfreference(pdfflushobject(pageresources))
+         -- pageattributes.MediaBox  = bbox
+            pageattributes.MediaBox  = pdfsharedobject(bbox)
+            pageattributes.Parent    = nil -- precalculate
+            pageattributes.Group     = nil -- todo
+
+            -- resources can be indirect
+
+            registerpage(pageattributes)
+
+            lpdf.finalizepage(true)
+
+            local TrimBox  = pageattributes.TrimBox
+            local CropBox  = pageattributes.CropBox
+            local BleedBox = pageattributes.BleedBox
+
+            -- Indirect objects don't work in all viewers.
+
+            if TrimBox  then pageattributes.TrimBox  = pdfsharedobject(TrimBox ) end
+            if CropBox  then pageattributes.CropBox  = pdfsharedobject(CropBox ) end
+            if BleedBox then pageattributes.BleedBox = pdfsharedobject(BleedBox) end
+
+        else
+
+            local xformtype  = specification.type or 0
+            local margin     = specification.margin or 0
+            local attributes = specification.attributes or ""
+            local resources  = specification.resources or ""
+
+            local wrapper    = nil
+
+            if xformtype == 0 then
+                wrapper = pdfdictionary {
+                    Type      = pdf_xobject,
+                    Subtype   = pdf_form,
+                    FormType  = 1,
+                    BBox      = nil,
+                    Matrix    = nil,
+                    Resources = nil,
+                }
+            else
+                wrapper = pdfdictionary {
+                    BBox      = nil,
+                    Matrix    = nil,
+                    Resources = nil,
+                }
+            end
+            if xformtype == 0 or xformtype == 1 or xformtype == 3 then
+                wrapper.BBox = pdfarray {
+                    -margin * bpfactor,
+                    -margin * bpfactor,
+                    (boundingbox[3] + margin) * bpfactor,
+                    (boundingbox[4] + margin) * bpfactor,
+                }
+            end
+            if xformtype == 0 or xformtype == 2 or xformtype == 3 then
+                -- can be shared too
+                wrapper.Matrix = pdfarray { 1, 0, 0, 1, 0, 0 }
+            end
+
+            local patterns = true
+
+            if attributes.Type and attributes.Type == pdf_pattern then
+                patterns = false
+            end
+
+            local boxresources   = lpdf.collectedresources {
+                patterns  = patterns,
+                serialize = false,
+            }
+            boxresources.Font    = fonts
+            boxresources.XObject = xforms
+
+         -- todo: maybe share them
+         -- wrapper.Resources = pdfreference(pdfflushobject(boxresources))
+
+            if resources ~= "" then
+                 boxresources = boxresources + resources
+            end
+            if attributes ~= "" then
+                wrapper = wrapper + attributes
+            end
+
+            wrapper.Resources = next(boxresources) and boxresources or nil
+            wrapper.ProcSet   = lpdf.procset()
+
+            pdfflushstreamobject(content,wrapper,true,specification.objnum)
+
+        end
+
+        for objnum in sortedhash(usedxforms) do
+            local f = flushedxforms[objnum]
+            if f[1] == false then
+                f[1] = true
+                local objnum        = f[2] -- specification.objnum
+                local specification = boxresources[objnum]
+                local list          = specification.list
+                localconverter(list,"xform",f[2],specification)
+            end
+        end
+
+        pdf_h, pdf_v  = 0, 0
+
+        if level == 1 then
+            flushdeferred()
+        end
+        level = level - 1
+
+    end
+
+end
+
+-- now comes the pdf file handling
+
+local objects       = { }
+local streams       = { } -- maybe just parallel to objects (no holes)
+local nofobjects    = 0
+local offset        = 0
+local f             = false
+local flush         = false
+local threshold     = 40 -- also #("/Filter /FlateDecode") (compression threshold)
+local objectstream  = true
+local compress      = true
+local cache         = false
+local info          = ""
+local catalog       = ""
+local lastdeferred  = false
+
+directives.register("backend.pdf.threshold",function(v)
+    if v then
+        threshold = tonumber(v) or 40
+    else
+        threshold = -1000
+    end
+end)
+
+local f_object       = formatters["%i 0 obj\010%s\010endobj\010"]
+local f_stream_n_u   = formatters["%i 0 obj\010<< /Length %i >>\010stream\010%s\010endstream\010endobj\010"]
+local f_stream_n_c   = formatters["%i 0 obj\010<< /Filter /FlateDecode /Length %i >>\010stream\010%s\010endstream\010endobj\010"]
+local f_stream_d_u   = formatters["%i 0 obj\010<< %s /Length %i >>\010stream\010%s\010endstream\010endobj\010"]
+local f_stream_d_c   = formatters["%i 0 obj\010<< %s /Filter /FlateDecode /Length %i >>\010stream\010%s\010endstream\010endobj\010"]
+local f_stream_d_r   = formatters["%i 0 obj\010<< %s >>\010stream\010%s\010endstream\010endobj\010"]
+
+----- f_object_b     = formatters["%i 0 obj\010"]
+local f_stream_b_n_u = formatters["%i 0 obj\010<< /Length %i >>\010stream\010"]
+local f_stream_b_n_c = formatters["%i 0 obj\010<< /Filter /FlateDecode /Length %i >>\010stream\010"]
+local f_stream_b_d_u = formatters["%i 0 obj\010<< %s /Length %i >>\010stream\010"]
+local f_stream_b_d_c = formatters["%i 0 obj\010<< %s /Filter /FlateDecode /Length %i >>\010stream\010"]
+local f_stream_b_d_r = formatters["%i 0 obj\010<< %s >>\010stream\010"]
+
+----- s_object_e <const> = "\010endobj\010"
+local s_stream_e <const> = "\010endstream\010endobj\010"
+
+do
+
+    -- Versions can be set but normally are managed by the official standards. When possible
+    -- reading and writing should look at these values.
+
+    function lpdf.setversion(major,minor)
+        majorversion = tonumber(major) or majorversion
+        minorversion = tonumber(minor) or minorversion
+    end
+
+    function lpdf.getversion(major,minor)
+        return majorversion, minorversion
+    end
+
+    function lpdf.majorversion() return majorversion end
+    function lpdf.minorversion() return minorversion end
+
+    -- It makes no sense to support levels so we only enable and disable and stick to level 3
+    -- which is both fast and efficient.
+
+    local frozen = false
+    local clevel = 3
+    local olevel = 1
+
+    function lpdf.setcompression(level,objectlevel,freeze)
+        if not frozen then
+            compress     = level       and level       ~= 0 and true or false
+            objectstream = objectlevel and objectlevel ~= 0 and true or false
+            frozen       = freeze
+        end
+    end
+
+    function lpdf.getcompression()
+        return compress and olevel or 0, objectstream and clevel or 0
+    end
+
+    function lpdf.compresslevel()
+        return compress and olevel or 0
+    end
+
+    function lpdf.objectcompresslevel()
+        return objectstream and clevel or 0
+    end
+
+    if environment.arguments.nocompression then
+        lpdf.setcompression(0,0,true)
+    end
+
+end
+
+local addtocache, flushcache, cache do
+
+    local data, d  = { }, 0
+    local list, l  = { }, 0
+    local coffset  = 0
+    local indices  = { }
+
+    local maxsize  = 32 * 1024 -- uncompressed
+    local maxcount = 0xFF
+
+    addtocache = function(n,str)
+        local size = #str
+        if size == 0 then
+            -- todo: message
+            return
+        end
+        if coffset + size > maxsize or d == maxcount then
+            flushcache()
+        end
+        if d == 0 then
+            nofobjects = nofobjects + 1
+            objects[nofobjects] = false
+            streams[nofobjects] = indices
+            cache = nofobjects
+        end
+        objects[n] = - cache
+        indices[n] = d
+        d = d + 1
+        -- can have a comment n 0 obj as in luatex
+        data[d] = str
+        l = l + 1 ; list[l] = n
+        l = l + 1 ; list[l] = coffset
+        coffset = coffset + size + 1
+    end
+
+    local p_ObjStm = pdfconstant("ObjStm")
+
+    flushcache = function() -- references cannot be stored
+        if l > 0 then
+            list = concat(list," ")
+            data[0] = list
+            data = concat(data,"\010",0,d)
+            local strobj = pdfdictionary {
+                Type  = p_ObjStm,
+                N     = d,
+                First = #list + 1,
+            }
+            objects[cache] = offset
+            local fb
+            if compress then
+                local size = #data
+                local comp = compressdata(data,size)
+                if comp and #comp < size then
+                    data = comp
+                    fb = f_stream_b_d_c
+                else
+                    fb = f_stream_b_d_u
+                end
+            else
+                fb = f_stream_b_d_u
+            end
+            local size = #data
+            if encryptstream then
+                data = encryptstream(data)
+                size = #data
+            end
+            local b = fb(cache,strobj(),size)
+            local e = s_stream_e
+            flush(f,b)
+            flush(f,data)
+            flush(f,e)
+            offset = offset + #b + size + #e
+            data, d = { }, 0
+            list, l = { }, 0
+            coffset = 0
+            indices = { }
+        end
+    end
+
+end
+
+do
+
+    local names       = { }
+    local cache       = { }
+    local nofpages    = 0
+
+    local texgetcount = tex.getcount
+
+    pdfreserveobject = function(name)
+        nofobjects = nofobjects + 1
+        objects[nofobjects] = false
+        if name then
+            names[name] = nofobjects
+            if trace_objects then
+                report_objects("reserving number %a under name %a",nofobjects,name)
+            end
+        elseif trace_objects then
+            report_objects("reserving number %a",nofobjects)
+        end
+        return nofobjects
+    end
+
+    pdfpagereference = function(n,complete) -- true | false | nil | n [true,false]
+        if n == true or not n then
+            complete = n
+            n = texgetcount("realpageno")
+        end
+        if n > nofpages then
+            nofpages = n
+        end
+        local r = pdfgetpagereference(n)
+        return complete and pdfreference(r) or r
+    end
+
+    lpdf.reserveobject = pdfreserveobject
+    lpdf.pagereference = pdfpagereference
+
+    function lpdf.lastreferredpage()
+        return nofpages
+    end
+
+    function lpdf.nofpages() -- this will change: document nofpages
+        return structures.pages.nofpages
+    end
+
+    function lpdf.object(...)
+        pdfdeferredobject(...)
+    end
+
+    function lpdf.delayedobject(data,n)
+        if n then
+            pdfdeferredobject(n,data)
+        else
+            n = pdfdeferredobject(data)
+        end
+--         pdfreferenceobject(n)
+        return n
+    end
+
+    pdfflushobject = function(name,data)
+        if data then
+            local named = names[name]
+            if named then
+                if not trace_objects then
+                elseif trace_details then
+                    report_objects("flushing data to reserved object with name %a, data: %S",name,data)
+                else
+                    report_objects("flushing data to reserved object with name %a",name)
+                end
+                return pdfimmediateobject(named,tostring(data))
+            else
+                if not trace_objects then
+                elseif trace_details then
+                    report_objects("flushing data to reserved object with number %s, data: %S",name,data)
+                else
+                    report_objects("flushing data to reserved object with number %s",name)
+                end
+                return pdfimmediateobject(name,tostring(data))
+            end
+        else
+            if trace_objects and trace_details then
+                report_objects("flushing data: %S",name)
+            end
+            return pdfimmediateobject(tostring(name))
+        end
+    end
+
+    pdfflushstreamobject = function(data,dict,compressed,objnum) -- default compressed
+        if trace_objects then
+            report_objects("flushing stream object of %s bytes",#data)
+        end
+        local dtype    = type(dict)
+        local kind     = compressed == "raw" and "raw" or "stream"
+        local nolength = nil
+        if compressed == "raw" then
+            compressed = false
+            nolength   = true
+         -- data       = string.formatters["<< %s >>stream\n%s\nendstream"](attr,data)
+        end
+
+        return pdfdeferredobject {
+            objnum        = objnum,
+            immediate     = true,
+            nolength      = nolength,
+            compresslevel = compressed,
+            type          = "stream",
+            string        = data,
+            attr          = (dtype == "string" and dict) or (dtype == "table" and dict()) or nil,
+        }
+    end
+
+    function lpdf.flushstreamfileobject(filename,dict,compressed,objnum) -- default compressed
+        if trace_objects then
+            report_objects("flushing stream file object %a",filename)
+        end
+        local dtype = type(dict)
+        return pdfdeferredobject {
+            objnum        = objnum,
+            immediate     = true,
+            compresslevel = compressed,
+            type          = "stream",
+            file          = filename,
+            attr          = (dtype == "string" and dict) or (dtype == "table" and dict()) or nil,
+        }
+    end
+
+    local shareobjectcache, shareobjectreferencecache = { }, { }
+
+    function lpdf.shareobject(content)
+        if content == nil then
+            -- invalid object not created
+        else
+            content = tostring(content)
+            local o = shareobjectcache[content]
+            if not o then
+                o = pdfimmediateobject(content)
+                shareobjectcache[content] = o
+            end
+            return o
+        end
+    end
+
+    pdfsharedobject = function(content)
+        if content == nil then
+            -- invalid object not created
+        else
+            content = tostring(content)
+            local r = shareobjectreferencecache[content]
+            if not r then
+                local o = shareobjectcache[content]
+                if not o then
+                    o = pdfimmediateobject(content)
+                    shareobjectcache[content] = o
+                end
+                r = pdfreference(o)
+                shareobjectreferencecache[content] = r
+            end
+            return r
+        end
+    end
+
+    lpdf.flushobject          = pdfflushobject
+    lpdf.flushstreamobject    = pdfflushstreamobject
+    lpdf.shareobjectreference = pdfsharedobject
+    lpdf.sharedobject         = pdfsharedobject
+
+end
+
+local pages = table.setmetatableindex(function(t,k)
+    local v = pdfreserveobject()
+    t[k] = v
+    return v
+end)
+
+pdfgetpagereference = function(n)
+    return pages[n]
+end
+
+lpdf.getpagereference = pdfgetpagereference
+
+local function flushnormalobj(data,n)
+    if not n then
+        nofobjects = nofobjects + 1
+        n = nofobjects
+    end
+    if encryptobject then
+        data = encryptobject(data)
+    end
+    data = f_object(n,data)
+    if level == 0 then
+        objects[n] = offset
+        offset = offset + #data
+        flush(f,data)
+    else
+        if not lastdeferred then
+            lastdeferred = n
+        elseif n < lastdeferred then
+            lastdeferred = n
+        end
+        objects[n] = data
+    end
+    return n
+end
+
+local function flushstreamobj(data,n,dict,comp,nolength)
+    if not data then
+        report("no data for %S",dict)
+        return
+    end
+    if not n then
+        nofobjects = nofobjects + 1
+        n = nofobjects
+    end
+    local size = #data
+    if comp ~= false then
+        comp = compress and size > threshold
+    end
+    if encryptobject then
+        dict = encryptobject(dict)
+    end
+    if level == 0 then
+        local b = nil
+        local e = s_stream_e
+        if nolength then
+            -- probleem: we need to adapt length!
+            b = f_stream_b_d_r(n,dict) -- raw object, already treated
+            if encryptstream then
+print("check length")
+                data = encryptstream(data)
+                size = #data
+            end
+       else
+            if comp then
+                local compdata = compressdata(data,size)
+                if compdata then
+                    local compsize = #compdata
+                    if compsize <= size - threshold then
+                        data = compdata
+                        size = compsize
+                    else
+                        comp = false
+                    end
+                else
+                    comp = false
+                end
+            end
+            if encryptstream then
+                data = encryptstream(data)
+                size = #data
+            end
+            if comp then
+                b = dict and f_stream_b_d_c(n,dict,size) or f_stream_b_n_c(n,size)
+            else
+                b = dict and f_stream_b_d_u(n,dict,size) or f_stream_b_n_u(n,size)
+            end
+        end
+        flush(f,b)
+        flush(f,data)
+        flush(f,e)
+        objects[n] = offset
+        offset = offset + #b + size + #e
+    else
+        if nolength then
+            if encryptstream then
+print("check length")
+                data = encryptstream(data)
+            end
+            data = f_stream_d_r(n,dict,data) -- raw object, already treated
+        else
+            if comp then
+                local compdata = compressdata(data,size)
+                if compdata then
+                    local compsize = #compdata
+                    if compsize <= size - threshold then
+                        data = compdata
+                        size = compsize
+                    else
+                        comp = false
+                    end
+                else
+                    comp = false
+                end
+            end
+            if encryptstream then
+                data = encryptstream(data)
+                size = #data
+            end
+            if comp then
+                data = dict and f_stream_d_c(n,dict,size,data) or f_stream_n_c(n,size,data)
+            else
+                data = dict and f_stream_d_u(n,dict,size,data) or f_stream_n_u(n,size,data)
+            end
+        end
+        if not lastdeferred then
+            lastdeferred = n
+        elseif n < lastdeferred then
+            lastdeferred = n
+        end
+        objects[n] = data
+    end
+    return n
+end
+
+flushdeferred = function() -- was forward defined
+    if lastdeferred then
+        for n=lastdeferred,nofobjects do
+            local o = objects[n]
+            if type(o) == "string" then
+                objects[n] = offset
+                offset = offset + #o
+                flush(f,o)
+            end
+        end
+        lastdeferred = false
+    end
+end
+
+pdfimmediateobject = function(a,b,c,d)
+    local kind --, immediate
+    local objnum, data, attr, filename
+    local compresslevel, objcompression, nolength
+    local argtype = type(a)
+    if argtype == "table" then
+        kind           = a.type          -- raw | stream
+     -- immediate      = a.immediate
+        objnum         = a.objnum
+        attr           = a.attr
+        compresslevel  = a.compresslevel
+        objcompression = a.objcompression
+        filename       = a.file
+        data           = a.string or a.stream or ""
+        nolength       = a.nolength
+        if kind == "stream" then
+            if filename then
+                data = loaddata(filename) or ""
+            end
+        elseif kind == "raw"then
+            if filename then
+                data = loaddata(filename) or ""
+            end
+        elseif kind == "file"then
+            kind = "raw"
+            data = filename and loaddata(filename) or ""
+        elseif kind == "streamfile" then
+            kind = "stream"
+            data = filename and loaddata(filename) or ""
+        end
+    else
+        if argtype == "number" then
+            objnum = a
+            a, b, c = b, c, d
+        else
+            nofobjects = nofobjects + 1
+            objnum = nofobjects
+        end
+        if b then
+            if a == "stream" then
+                kind = "stream"
+                data = b
+            elseif a == "file" then
+             -- kind = "raw"
+                data = loaddata(b)
+            elseif a == "streamfile" then
+                kind = "stream"
+                data = loaddata(b)
+            else
+                data = "" -- invalid object
+            end
+            attr = c
+        else
+         -- kind = "raw"
+            data = a
+        end
+    end
+    if not objnum then
+        nofobjects = nofobjects + 1
+        objnum = nofobjects
+    end
+    -- todo: immediate
+    if kind == "stream" then
+        flushstreamobj(data,objnum,attr,compresslevel,nolength) -- nil == auto
+    elseif objectstream and objcompression ~= false then
+        addtocache(objnum,data)
+    else
+        flushnormalobj(data,objnum)
+    end
+    return objnum
+end
+
+pdfdeferredobject    = pdfimmediateobject
+
+lpdf.deferredobject  = pdfimmediateobject
+lpdf.immediateobject = pdfimmediateobject
+
+-- In lua 5.4 the methods are now moved one metalevel deeper so we need to get them
+-- from mt.__index instead. (I did get that at first.) It makes for a slightly (imo)
+-- nicer interface but no real gain in speed as we don't flush that often.
+
+local openfile, closefile  do
+
+    -- I used to do <space><lf> but then figured out that when I open and save a file in a mode
+    -- that removes trailing spaces, the xref becomes invalid. The problem was then that a
+    -- reconstruction of the file by a viewer gives weird effects probably because percent symbols
+    -- gets interpreted then. Thanks to Ross Moore for noticing this side effect!
+
+    local f_used       = formatters["%010i 00000 n\013\010"]
+    local f_link       = formatters["%010i 00000 f\013\010"]
+    local f_first      = formatters["%010i 65535 f\013\010"]
+
+    local f_pdf_tag    = formatters["%%PDF-%i.%i\010"]
+    local f_xref       = formatters["xref\0100 %i\010"]
+    local f_trailer_id = formatters["trailer\010<< %s /ID [ <%s> <%s> ] >>\010startxref\010%i\010%%%%EOF"]
+    local f_trailer_no = formatters["trailer\010<< %s >>\010startxref\010%i\010%%%%EOF"]
+    local f_startxref  = formatters["startxref\010%i\010%%%%EOF"]
+
+    local inmemory = false
+    local close    = false
+    local update   = false
+
+ -- local banner <const> = "%\xCC\xD5\xC1\xD4\xC5\xD8\xD0\xC4\xC6\010"     -- LUATEXPDF  (+128)
+    local banner <const> = "%\xC3\xCF\xCE\xD4\xC5\xD8\xD4\xD0\xC4\xC6\010" -- CONTEXTPDF (+128)
+
+    openfile = function(filename)
+        --
+        local arguments = environment.arguments
+        if arguments.ownerpassword then
+            lpdf.setencryption {
+                ownerpassword = arguments.ownerpassword,
+                userpassword  = arguments.userpassword,
+                permissions   = arguments.permissions,
+            }
+        end
+        --
+        if inmemory then
+            local n = 0
+            f = { }
+            flush = function(f,s)
+                n = n + 1 f[n] = s
+             -- offset = offset + #s
+            end
+            close = function(f)
+                f = concat(f)
+                io.savedata(filename,f)
+                f = false
+            end
+            update = function(f,s)
+                f[1] = s
+            end
+         -- local n = 0
+         -- f = {
+         --     write = function(self,s)
+         --         n = n + 1 f[n] = s
+         --     end,
+         --     close = function(self)
+         --         f = concat(f)
+         --         io.savedata(filename,f)
+         --         f = false
+         --     end,
+         -- }
+         else
+            f = io.open(filename,"wb")
+            if not f then
+                report()
+                report("quitting because file %a cannot be opened for writing",filename)
+                report()
+                os.exit()
+            end
+         -- f:setvbuf("full",64*1024)
+            local m = getmetatable(f)
+            flush = m.write or m.__index.write
+            close = m.close or m.__index.close
+            update = function(f,s)
+                f:seek("set",0)
+                f:write(s)
+            end
+        end
+        local version = f_pdf_tag(majorversion,minorversion)
+        flush(f,version)
+        flush(f,banner)
+        offset = offset + #version + #banner
+    end
+
+    closefile = function(abort)
+        if abort then
+            close(f)
+            if not environment.arguments.nodummy then
+                f = io.open(abort,"wb")
+                if f then
+                    local name = resolvers.findfile("context-lmtx-error.pdf")
+                    if name then
+                        local data = io.loaddata(name)
+                        if data then
+                            f:write(data)
+                            f:close()
+                            return
+                        end
+                    end
+                    f:close()
+                end
+            end
+            os.remove(abort)
+        else
+            local xrefoffset = offset
+            local lastfree   = 0
+            local noffree    = 0
+            --
+            local os = objectstream
+            if encryptstream then
+                objectstream = false
+            end
+            local catalog    = lpdf.getcatalog()
+            objectstream = os
+            --
+            local info       = lpdf.getinfo()
+            local trailerid  = lpdf.gettrailerid()
+
+            if objectstream then
+                flushdeferred()
+                flushcache()
+                --
+                xrefoffset = offset
+                --
+                nofobjects = nofobjects + 1
+                objects[nofobjects] = offset -- + 1
+                --
+                -- combine these three in one doesn't really give less code so
+                -- we go for the efficient ones
+                --
+                local nofbytes  = 4
+                local c1, c2, c3, c4
+                if offset <= 0xFFFF then
+                    nofbytes = 2
+                    for i=1,nofobjects do
+                        local o = objects[i]
+                        if not o then
+                            noffree = noffree + 1
+                        else
+                            local strm = o < 0
+                            if strm then
+                                o = -o
+                            end
+                            c1 = (o>>8)&0xFF
+                            c2 = (o>>0)&0xFF
+                            if strm then
+                                objects[i] = char(2,c1,c2,streams[o][i])
+                            else
+                                objects[i] = char(1,c1,c2,0)
+                            end
+                        end
+                    end
+                    if noffree > 0 then
+                        for i=nofobjects,1,-1 do
+                            local o = objects[i]
+                            if not o then
+                                local f1 = (lastfree>>8)&0xFF
+                                local f2 = (lastfree>>0)&0xFF
+                                objects[i] = char(0,f1,f2,0)
+                                lastfree   = i
+                            end
+                        end
+                    end
+                elseif offset <= 0xFFFFFF then
+                    nofbytes = 3
+                    for i=1,nofobjects do
+                        local o = objects[i]
+                        if not o then
+                            noffree = noffree + 1
+                        else
+                            local strm = o < 0
+                            if strm then
+                                o = -o
+                            end
+                            c1 = (o>>16)&0xFF
+                            c2 = (o>> 8)&0xFF
+                            c3 = (o>> 0)&0xFF
+                            if strm then
+                                objects[i] = char(2,c1,c2,c3,streams[o][i])
+                            else
+                                objects[i] = char(1,c1,c2,c3,0)
+                            end
+                        end
+                    end
+                    if noffree > 0 then
+                        for i=nofobjects,1,-1 do
+                            local o = objects[i]
+                            if not o then
+                                local f1 = (lastfree>>16)&0xFF
+                                local f2 = (lastfree>> 8)&0xFF
+                                local f3 = (lastfree>> 0)&0xFF
+                                objects[i] = char(0,f1,f2,f3,0)
+                                lastfree   = i
+                            end
+                        end
+                    end
+                else
+                    nofbytes = 4
+                    for i=1,nofobjects do
+                        local o = objects[i]
+                        if not o then
+                            noffree = noffree + 1
+                        else
+                            local strm = o < 0
+                            if strm then
+                                o = -o
+                            end
+                            c1 = (o>>24)&0xFF
+                            c2 = (o>>16)&0xFF
+                            c3 = (o>> 8)&0xFF
+                            c4 = (o>> 0)&0xFF
+                            if strm then
+                                objects[i] = char(2,c1,c2,c3,c4,streams[o][i])
+                            else
+                                objects[i] = char(1,c1,c2,c3,c4,0)
+                            end
+                        end
+                    end
+                    if noffree > 0 then
+                        for i=nofobjects,1,-1 do
+                            local o = objects[i]
+                            if not o then
+                                local f1 = (lastfree>>24)&0xFF
+                                local f2 = (lastfree>>16)&0xFF
+                                local f3 = (lastfree>> 8)&0xFF
+                                local f4 = (lastfree>> 0)&0xFF
+                                objects[i] = char(0,f1,f2,f3,f4,0)
+                                lastfree   = i
+                            end
+                        end
+                    end
+                end
+                objects[0] = rep("\0",1+nofbytes+1)
+                local data = concat(objects,"",0,nofobjects)
+                local size = #data
+                local xref = pdfdictionary {
+                    Type    = pdfconstant("XRef"),
+                    Size    = nofobjects + 1,
+                    W       = pdfarray { 1, nofbytes, 1 },
+                    Root    = catalog,
+                    Info    = info,
+                    ID      = trailerid and pdfarray { pdfliteral(trailerid,true), pdfliteral(trailerid,true) } or nil,
+                    Encrypt = encdict or nil,
+                }
+                local fb
+             -- if encryptstream then
+             --     if compress then
+             --         local comp = compressdata(data,size)
+             --         if comp then
+             --             data = comp
+             --             size = #data
+             --             fb = f_stream_b_d_c
+             --             xref.Filter = pdfarray {
+             --                 pdfconstant("Crypt"), -- identity
+             --                 pdfconstant("FlateDecode")
+             --             }
+             --         else
+             --             xref.Filter = pdfconstant("Crypt") -- identity
+             --         end
+             --     else
+             --         xref.Filter = pdfconstant("Crypt") -- identity
+             --     end
+             --     fb = f_stream_b_d_u
+             -- else
+                    if compress then
+                        local comp = compressdata(data,size)
+                        if comp then
+                            data = comp
+                            size = #data
+                            fb = f_stream_b_d_c
+                        else
+                            fb = f_stream_b_d_u
+                        end
+                    else
+                        fb = f_stream_b_d_u
+                    end
+             -- end
+                -- no encryption of data here
+                flush(f,fb(nofobjects,xref(),size))
+                flush(f,data)
+                flush(f,s_stream_e)
+                flush(f,f_startxref(xrefoffset))
+            else
+                flushdeferred()
+                --
+             -- if encryptstream then
+             --     -- unencrypted !
+             --     local eo = encryptobject
+             --     encryptobject = false
+             --     encdict = pdfreference(pdfimmediateobject(tostring(encdict)))
+             --     encryptobject = eo
+             -- end
+                --
+                xrefoffset = offset
+                flush(f,f_xref(nofobjects+1))
+                local trailer = pdfdictionary {
+                    Size    = nofobjects + 1,
+                    Root    = catalog,
+                    Info    = info,
+                    Encrypt = encdict or nil,
+                }
+                for i=1,nofobjects do
+                    local o = objects[i]
+                    if o then
+                        objects[i] = f_used(o)
+                    end
+                end
+                for i=nofobjects,1,-1 do
+                    local o = objects[i]
+                    if not o then
+                        objects[i] = f_link(lastfree)
+                        lastfree   = i
+                    end
+                end
+                objects[0] = f_first(lastfree)
+                flush(f,concat(objects,"",0,nofobjects))
+                trailer.Size = nofobjects + 1
+                if trailerid then
+                    flush(f,f_trailer_id(trailer(),trailerid,trailerid,xrefoffset))
+                else
+                    flush(f,f_trailer_no(trailer(),xrefoffset))
+                end
+            end
+            update(f,f_pdf_tag(majorversion,minorversion))
+            close(f)
+        end
+        io.flush()
+        closefile = function() end
+    end
+
+end
+
+-- For the moment we overload it here, although back-fil.lua eventually will
+-- be merged with back-pdf as it's pdf specific, or maybe back-imp-pdf or so.
+
+do
+
+    -- We overload img but at some point it will even go away, so we just
+    -- reimplement what we need in context. This will change completely i.e.
+    -- we will drop the low level interface!
+
+    local pdfbackend     = backends.registered.pdf
+    local nodeinjections = pdfbackend.nodeinjections
+    local codeinjections = pdfbackend.codeinjections
+
+    local imagetypes     = images.types -- pdf png jpg jp2 jbig2 stream
+    local img_none       = imagetypes.none
+
+    local newimagerule   = nuts.pool.imagerule
+    local setattrlist    = nuts.setattrlist
+    local setprop        = nuts.setprop
+
+    local report_images  = logs.reporter("backend","images")
+
+    local lastindex      = 0
+    local indices        = { }
+
+    local bpfactor       = number.dimenfactors.bp
+
+    function codeinjections.newimage(specification)
+        return specification
+    end
+
+    function codeinjections.copyimage(original)
+        return setmetatableindex(original)
+    end
+
+    function codeinjections.scanimage(specification)
+        -- placeholder, doesn't give back dimensions etc but will be plugged in
+        return specification
+    end
+
+    local function embedimage(specification)
+        if specification then
+            lastindex = lastindex + 1
+            index     = lastindex
+            specification.index = index
+            local xobject = pdfdictionary { }
+            if not specification.notype then
+                xobject.Type     = pdf_xobject
+                xobject.Subtype  = pdf_form
+                xobject.FormType = 1
+            end
+            local bbox = specification.bbox
+            if bbox and not specification.nobbox then
+                xobject.BBox = pdfarray {
+                    bbox[1] * bpfactor,
+                    bbox[2] * bpfactor,
+                    bbox[3] * bpfactor,
+                    bbox[4] * bpfactor,
+                }
+            end
+            xobject = xobject + specification.attr
+            if bbox and not specification.width then
+                specification.width = bbox[3]
+            end
+            if bbox and not specification.height then
+                specification.height = bbox[4]
+            end
+            local dict = xobject()
+            --
+            nofobjects     = nofobjects + 1
+            local objnum   = nofobjects
+            local nolength = specification.nolength
+            local stream   = specification.stream or specification.string
+            --
+            -- We cannot set type in native img so we need this hack or
+            -- otherwise we need to patch too much. Better that i write
+            -- a wrapper then. Anyway, it has to be done better: a key that
+            -- tells either or not to scale by xsize/ysize when flushing.
+            --
+            if not specification.type then
+                local kind = specification.kind
+                if kind then
+                    -- take that one
+                elseif attr and find(attr,"BBox") then
+                    kind = img_stream
+                else
+                    -- hack: a bitmap
+                    kind = img_none
+                end
+                specification.type = kind
+                specification.kind = kind
+            end
+            flushstreamobj(stream,objnum,dict,compresslevel,nolength)
+            specification.objnum      = objnum
+            specification.rotation    = specification.rotation or 0
+            specification.orientation = specification.orientation or 0
+            specification.transform   = specification.transform or 0
+            specification.stream      = nil
+            specification.attr        = nil
+            specification.type        = specification.kind or specification.type or img_none
+            indices[index]            = specification -- better create a real specification
+            return specification
+        end
+    end
+
+    codeinjections.embedimage = embedimage
+
+    function codeinjections.wrapimage(specification)
+        --
+        local index = specification.index
+        if not index then
+            embedimage(specification)
+        end
+        --
+        local n = newimagerule(
+            specification.width  or 0,
+            specification.height or 0,
+            specification.depth  or 0
+        )
+        setattrlist(n,true)
+        setprop(n,"index",specification.index)
+        return tonode(n)
+    end
+
+    pdfincludeimage = function(index)
+        local specification = indices[index]
+        if specification then
+            local bbox      = specification.bbox
+            local xorigin   = bbox[1]
+            local yorigin   = bbox[2]
+            local xsize     = bbox[3] - xorigin -- we need the original ones, not the 'rotated' ones
+            local ysize     = bbox[4] - yorigin -- we need the original ones, not the 'rotated' ones
+            local transform = specification.transform or 0
+            local objnum    = specification.objnum or pdfreserveobject()
+            local groupref  = nil
+            local kind      = specification.kind or specification.type or img_none -- determines scaling type
+            return
+                kind,
+                xorigin, yorigin,
+                xsize, ysize,
+                transform,
+                objnum,
+                groupref
+        end
+    end
+
+    lpdf.includeimage = pdfincludeimage
+
+end
+
+-- The driver.
+
+do
+
+ -- local addsuffix  = file.addsuffix
+    local texgetbox  = tex.getbox
+
+    local pdfname    = nil
+    local converter  = nil
+    local useddriver = nil -- a bit of a hack
+
+    local function outputfilename(driver)
+        return pdfname
+    end
+
+-- local outputfilename ; do -- old todo usedname in ^^
+--     local filename = nil
+--     outputfilename = function(driver,usedname)
+--         if usedname and usedname ~= "" then
+--             filename = addsuffix(usedname,"pdf")
+--         elseif not filename or filename == "" then
+--             filename = addsuffix(tex.jobname,"pdf")
+--         end
+--         return filename
+--     end
+-- end
+
+    -- todo: prevent twice
+    local function prepare(driver)
+        if not environment.initex then
+            --
+            backends.initialize("pdf") -- also does bindings
+            --
+            pdfname = tex.jobname .. ".pdf"
+            openfile(pdfname)
+            --
+            luatex.registerstopactions(1,function()
+                if pdfname then
+                    lpdf.finalizedocument()
+                    closefile()
+                    pdfname = nil
+                end
+            end)
+            --
+            luatex.registerpageactions(1,function()
+                if pdfname then
+                    lpdf.finalizepage(true)
+                end
+            end)
+            --
+            lpdf.registerdocumentfinalizer(wrapupdocument,nil,"wrapping up")
+            --
+            statistics.register("result saved in file", function()
+                local outputfilename = environment.outputfilename or environment.jobname or tex.jobname or "<unset>"
+                outputfilename = string.gsub(outputfilename,"^%./+","") -- todo: make/use a helper
+                return string.format("%s.%s, compresslevel %s, objectcompresslevel %s",outputfilename,"pdf",lpdf.getcompression())
+            end)
+            --
+            luatex.registerstopactions(function()
+                if pdfname then
+                    local r = lpdf.lastreferredpage() -- somehow referenced
+                    local s = lpdf.getnofpages()      -- in page tree, saved in file
+                    local t = lpdf.nofpages()         -- in tuc file
+                    if r > s then
+                        report()
+                        report("referred pages: %i, saved pages %i, pages from tuc file: %i, possible corrupt file",r,s,t)
+                        report()
+                    end
+                end
+            end)
+        end
+        converter  = drivers.converters.lmtx
+        useddriver = driver
+    end
+
+    local function wrapup(driver)
+        if pdfname then
+            closefile()
+            pdfname = nil
+        end
+    end
+
+    local function cleanup(driver)
+        if pdfname then
+            closefile(pdfname)
+            pdfname = nil
+        end
+    end
+
+    local function convert(driver,boxnumber)
+        converter(driver,texgetbox(boxnumber),"page")
+    end
+
+--     localconverter = function(...)
+--         print(...)                -- ok when we add this
+--         converter(useddriver,...) -- otherwise nil .. lua bug
+--     end
+
+    localconverter = function(a,b,c,d)
+        converter(useddriver,a,b,c,d)
+    end
+
+    drivers.install {
+        name     = "pdf",
+        flushers = flushers,
+        actions  = {
+            prepare         = prepare,
+            wrapup          = wrapup,
+            cleanup         = cleanup,
+            --
+            initialize      = initialize,
+            convert         = convert,
+            finalize        = finalize,
+            --
+            outputfilename  = outputfilename,
+        },
+    }
+
+end

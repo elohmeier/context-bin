@@ -1,0 +1,282 @@
+%D \module
+%D   [       file=strc-mar,
+%D        version=2008.10.20,
+%D          title=\CONTEXT\ Structure Macros,
+%D       subtitle=Markings,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Structure Macros / Markings}
+
+\registerctxluafile{strc-mar}{autosuffix}
+
+\unprotect
+
+%D Synchronizing marks is a rather tricky and messy business. When setting a mark, a
+%D node is added to the list in order for to \TEX\ be able to figure out the 3
+%D current marks when a page is made (last mark on previous page, first on current
+%D page, last on current page; in \LUATEX\ we might at one point have the first on
+%D the next page as well).
+%D
+%D Resetting a mark is not easy. An empty one will not erase the last one on the
+%D previous page for instance. In \LUATEX\ we can clear a marks state register with
+%D \type {\clearmarks} but since this is an immediate operation it might have
+%D unwanted side effects when \TEX\ has collected several pages of text and
+%D finishing off these pages uses marks.
+%D
+%D In \MKIV\ we provide an alternative model that permits some more control over the
+%D way marks are used. It is not entirely compatible with \MKII\ or previous \MKIV\
+%D implementations but in practice this is not a real problem. It's also easier now
+%D to extend this mechanism.
+
+%D In \LUAMETATEX\ we have extended the marks mechanism with a few handy options.
+%D First of all we have automigration built in for inserts and marks (so we no
+%D longer need to do that in \LUA) and marks can be properly flushed.
+
+% \ifdefined\automigrationmode \automigrationmode0 \fi
+% \starttext
+% \dorecurse{10}{
+%     \dontleavehmode\setbox0\hbox{SAMPLE #1}\box0
+%     \marks\foomark{sample #1}%
+%     \samplefile{tufte}\par
+% }%
+% \stoptext
+
+% current
+
+% column:n | n | column | etc ... now only column:n
+
+% default page all keep
+
+%definesystemattribute [marks] [global]
+
+\installcorenamespace{marking}
+\installcorenamespace{markingclass}
+\installcorenamespace{markingsyncs}
+\installcorenamespace{markingfilter}
+
+\installcommandhandler \??marking {marking} \??marking
+
+\newconditional\inhibitgetmarking % will become private
+\newconditional\inhibitsetmarking % will become private
+
+\newtoks       \everymarking
+
+% \clf_definemarking{\currentmarking}{\currentmarkingparent}%
+
+\appendtoks
+    \ifcsname\??markingclass\currentmarking\endcsname\else
+        \ifempty\currentmarkingparent
+            \expandafter\newmarks\csname\??markingclass\currentmarking\endcsname
+            \expandafter\newtoks \csname\??markingsyncs\currentmarking\endcsname
+        \else
+            \expandafter\letcsname\??markingclass\currentmarking\expandafter\endcsname\csname\??markingclass\currentmarkingparent\endcsname
+            \expandafter\letcsname\??markingsyncs\currentmarking\expandafter\endcsname\csname\??markingsyncs\currentmarkingparent\endcsname
+        \fi
+    \fi
+\to \everydefinemarking
+
+\permanent\protected\tolerant\def\relatemarking[#1]#*[#2]%
+  {\ifarguments\or\else
+     \xtoksapp\csname\??markingsyncs#2\endcsname{%
+       \flushmarks\csname\??markingclass#1\endcsname
+       \noexpand\the\begincsname\??markingsyncs#1\endcsname
+     }%
+   \fi}
+
+\permanent\protected\tolerant\def\clearmarking[#1]%
+  {\ifarguments\else
+     \begingroup
+     \clearmarks\csname\??markingclass#1\endcsname
+     \enforced\let\flushmarks\clearmarks
+     \the\csname\??markingsyncs#1\endcsname
+     \endgroup
+   \fi}
+
+\permanent\protected\tolerant\def\resetmarking[#1]%
+  {\ifarguments\else
+     % probably best: \dontleavehmode
+     \the\csname\??markingsyncs#1\endcsname
+   \fi}
+
+\permanent\protected\tolerant\def\resetsynchronizemarking[#1]%
+  {\clf_resetsynchronizemarking{#1}}
+
+\tolerant\def\synchronizemarking[#1]#*[#2]#*[#3]% #3: options
+  {\clf_synchronizemarking{#1}\plusone\numexpr#2\relax}
+
+\def\strc_markings_synchronize#1#2#3% category n box
+  {\ifvoid#3\orelse\ifcstok{#1}\v!page\else
+     \clf_synchronizemarking{#1}\numexpr#2\relax\numexpr#3\relax
+   \fi}
+
+\permanent\def\doifelsemarking#1%
+  {\ifcondition\ifcommandhandler\??marking{#1}%
+     \expandafter\firstoftwoarguments
+   \else
+     \expandafter\secondoftwoarguments
+   \fi}
+
+\permanent\protected\tolerant\def\setmarking[#1]#:#2%
+  {\ifarguments\orelse\ifconditional\inhibitsetmarking\else
+     % so no: \dontleavehmode
+     \the\csname\??markingsyncs#1\endcsname
+     \ifcstok{\namedmarkingparameter{#1}\c!expansion}\v!yes
+       \normalexpanded{%
+          \ifvmode\expandafter\flushatnextpar\else\expandafter\firstofoneargument\fi
+            {\marks\csname\??markingclass#1\endcsname{#2}}%
+       }%
+     \else
+       \ifvmode\expandafter\flushatnextpar\else\expandafter\firstofoneargument\fi
+          {\marks\csname\??markingclass#1\endcsname{#2}}%
+     \fi
+   \fi}
+
+\aliased\let\marking        \setmarking
+\aliased\let\doifmarkingelse\doifelsemarking
+
+% defaults
+
+\setupmarking
+  [\c!expansion=\v!no,
+   \c!separator=\space\emdash\space,
+   \c!filtercommand=\firstofoneargument,
+   \c!state=\v!start]
+
+% fetching, regular interface
+
+\permanent\protected\def\getmarking
+  {\ifconditional\inhibitgetmarking
+     \expandafter\strc_markings_get_nop
+   \else
+     \expandafter\strc_markings_get_yes
+   \fi}
+
+\tolerant\def\strc_markings_get_nop[#-]#*[#-]#*[#-]%
+  {}
+
+\tolerant\def\strc_markings_get_yes[#1]#*[#2]#*[#3]%
+  {\ifarguments\orelse\ifcstok{\namedmarkingparameter{#1}\c!state}\v!start
+     \begingroup
+     \setsystemmode\v!marking
+     \the\everymarking
+     \ifparameter#3\or
+       \ifcstok{#2}\v!page
+         \markingcommand{#1}{\csname\??markingfilter#3\endcsname{#1}}%
+       \else
+         \markingcommand{#1}{\clf_getsynchronizedmarking\begincsname\??markingclass#1\endcsname{#2}{#3}}%
+       \fi
+     \orelse\ifparameter#2\or
+       \markingcommand{#1}{\csname\??markingfilter#2\endcsname{#1}}%
+     \else
+       \markingcommand{#1}{\csname\??markingfilter\v!default\endcsname{#1}}%
+     \fi
+     \endgroup
+  \fi}
+
+% previous      : last before sync        next   : first after sync
+% top           : first in sync           bottom : last in sync
+% first|default : first not top in sync   last   : last not bottom in sync
+
+% current
+
+\defcsname\??markingfilter\v!previous\endcsname#1{\topmarks    \csname\??markingclass#1\endcsname}
+\defcsname\??markingfilter\v!next    \endcsname#1{\botmarks    \csname\??markingclass#1\endcsname}
+
+%defcsname\??markingfilter\v!top     \endcsname#1{\topmarks    \csname\??markingclass#1\endcsname}
+\defcsname\??markingfilter\v!top     \endcsname#1{\firstmarks  \csname\??markingclass#1\endcsname}
+\defcsname\??markingfilter\v!bottom  \endcsname#1{\botmarks    \csname\??markingclass#1\endcsname}
+
+\defcsname\??markingfilter\v!first   \endcsname#1{\firstmarks  \csname\??markingclass#1\endcsname}
+\defcsname\??markingfilter\v!last    \endcsname#1{\botmarks    \csname\??markingclass#1\endcsname}
+
+\defcsname\??markingfilter\v!current \endcsname#1{\currentmarks\csname\??markingclass#1\endcsname}
+
+\letcsname\??markingfilter\v!default\expandafter\endcsname
+   \csname\??markingfilter\v!first              \endcsname
+
+% the fetchers are fully expandable: [name][method]
+
+\def\strc_markings_fetch_one#1#2#3%
+  {\ifparameter#1\or
+     \ifconditional\inhibitgetmarking\else
+       \ifcstok{#2}\v!page
+         \markingcommand{#1}{\begincsname\??markingfilter#3\endcsname{#1}}%
+       \else
+         \markingcommand{#1}{\clf_getsynchronizedmarking{#1}{#2}}%
+       \fi
+     \fi
+   \fi}
+
+\def\strc_markings_fetch_two#1#2%
+  {\ifparameter#1\or
+     \ifconditional\inhibitgetmarking\else
+       \ifcstok{#2}\v!page
+         \markingcommand{#1}{\begincsname\??markingfilter\v!first\endcsname{#1}}%
+         \markingseparator{#1}%
+         \markingcommand{#1}{\begincsname\??markingfilter\v!last\endcsname{#1}}%
+       \else
+         \markingcommand{#1}{\clf_getsynchronizedmarking{#1}\v!first}%
+         \markingseparator{#1}%
+         \markingcommand{#1}{\clf_getsynchronizedmarking{#1}\v!last}%
+       \fi
+     \fi
+   \fi}
+
+\def\strc_markings_fetch_all#1#2%
+  {\ifparameter#1\or
+     \ifconditional\inhibitgetmarking\else
+       \ifcstok{#2}\v!page
+         \markingcommand{#1}{\begincsname\??markingfilter\v!previous\endcsname{#1}}%
+         \markingseparator{#1}%
+         \markingcommand{#1}{\begincsname\??markingfilter\v!first\endcsname{#1}}%
+         \markingseparator{#1}%
+         \markingcommand{#1}{\begincsname\??markingfilter\v!last\endcsname{#1}}%
+       \else
+        %\markingcommand{#1}{\begincsname\??markclass:\v!previous\endcsname{#1}}%
+        %\markingseparator{#1}%
+         \markingcommand{#1}{\clf_getsynchronizedmarking{#1}\v!first}%
+         \markingseparator{#1}%
+         \markingcommand{#1}{\clf_getsynchronizedmarking{#1}\v!last}%
+       \fi
+     \fi
+  \fi}
+
+\permanent\tolerant\def\fetchonemark [#1]#*[#2]{\strc_markings_fetch_one{#1}\v!page{#2}}
+\permanent\tolerant\def\fetchtwomarks      [#1]{\strc_markings_fetch_two{#1}\v!page}
+\permanent\tolerant\def\fetchallmarks      [#1]{\strc_markings_fetch_all{#1}\v!page}
+
+\aliased\let\fetchmark\fetchonemark
+
+% also fully expandable but here we have: [name][range][method]
+
+\permanent\tolerant\def\fetchonemarking [#1]#*[#2]#*[#3]{\strc_markings_fetch_one{#1}{#2}{#3}}
+\permanent\tolerant\def\fetchtwomarkings      [#1]#*[#2]{\strc_markings_fetch_two{#1}{#2}}
+\permanent\tolerant\def\fetchallmarkings      [#1]#*[#2]{\strc_markings_fetch_all{#1}{#2}}
+
+\aliased\let\fetchmarking\fetchonemarking
+
+\permanent\def\markingseparator#1{\namedmarkingparameter{#1}\c!separator}
+\permanent\def\markingcommand  #1{\namedmarkingparameter{#1}\c!filtercommand}
+
+%D Experimental:
+%D
+%D \starttyping
+%D \definemarking[boxmark]
+%D
+%D \setbox0\ruledvbox{
+%D     \marking[boxmark]{tufte} \input tufte \par
+%D     \marking[boxmark]{ward}  \input ward  \par
+%D }
+%D
+%D \synchronizemarking[zerobox][0] \box0
+%D
+%D marks: (\getmarking[boxmark][zerobox][first],\getmarking[boxmark][zerobox][last])
+%D \stoptyping
+
+\protect \endinput

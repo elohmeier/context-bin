@@ -1,0 +1,1756 @@
+if not modules then modules = { } end modules ['driv-shp'] = {
+    version   = 1.001,
+    optimize  = true,
+    comment   = "companion to driv-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local type, next, rawget, rawset = type, next, rawget, rawset
+
+local setmetatableindex  = table.setmetatableindex
+local formatters         = string.formatters
+local concat             = table.concat
+local keys               = table.keys
+local insert             = table.insert
+local sortedhash         = table.sortedhash
+local find               = string.find
+local stripstring        = string.strip
+local sequenced          = table.sequenced
+local round              = math.round
+local nuts               = nodes.nuts
+
+local tonut              = nodes.tonut
+local tonode             = nodes.tonode
+
+local getdirection       = nuts.getdirection
+local getlist            = nuts.getlist
+local getoffsets         = nuts.getoffsets
+local getorientation     = nuts.getorientation
+local getanchors         = nuts.getanchors
+local getgeometry        = nuts.getgeometry
+local getxyscales        = nuts.getxyscales
+local getwhd             = nuts.getwhd
+local getkern            = nuts.getkern
+local getheight          = nuts.getheight
+local getdepth           = nuts.getdepth
+----- getwidth           = nuts.getwidth
+local getnext            = nuts.getnext
+local getsubtype         = nuts.getsubtype
+local getid              = nuts.getid
+local getleader          = nuts.getleader
+----- getglue            = nuts.getglue
+local getshift           = nuts.getshift
+local getreplace         = nuts.getreplace
+local setreplace         = nuts.setreplace
+local getfont            = nuts.getfont
+local getkerndimension   = nuts.getkerndimension
+local getglyphdimensions = nuts.getglyphdimensions
+
+local setdirection       = nuts.setdirection
+local setlink            = nuts.setlink
+
+local isglyph            = nuts.isglyph
+----- nextdir            = nuts.traversers.dir
+local nextnode           = nuts.traversers.node
+
+local effectiveglue      = nuts.effectiveglue
+local dirdimensions      = nuts.dirdimensions
+
+local fonthashes         = fonts.hashes
+local fontdata           = fonthashes.identifiers
+local characters         = fonthashes.characters
+local parameters         = fonthashes.parameters
+
+local nodecodes          = nodes.nodecodes
+local whatsitcodes       = nodes.whatsitcodes
+local gluecodes          = nodes.gluecodes
+local dirvalues          = nodes.dirvalues
+local subtypes           = nodes.subtypes
+
+local lefttoright_code   = dirvalues.lefttoright
+local righttoleft_code   = dirvalues.righttoleft
+
+local glyph_code         = nodecodes.glyph
+local kern_code          = nodecodes.kern
+local glue_code          = nodecodes.glue
+local hlist_code         = nodecodes.hlist
+local vlist_code         = nodecodes.vlist
+local dir_code           = nodecodes.dir
+local disc_code          = nodecodes.disc
+local math_code          = nodecodes.math
+local rule_code          = nodecodes.rule
+local whatsit_code       = nodecodes.whatsit
+
+local leaders_code       = gluecodes.leaders
+local cleaders_code      = gluecodes.cleaders
+local xleaders_code      = gluecodes.xleaders
+local gleaders_code      = gluecodes.gleaders
+
+local spaceskip_code     = gluecodes.spaceskip
+
+local getpagedimensions  = layouts.getpagedimensions
+
+local drivers            = drivers
+
+local report             = logs.reporter("drivers")
+
+---------------------------------------------------------------------------------------
+-- For the moment rules need at least some height but maybe some day we let user rules
+-- fall through or have some way to force a rule via some property.
+---------------------------------------------------------------------------------------
+
+local lastfont       = nil
+local fontcharacters = nil
+
+local magicconstants = tex.magicconstants
+local maxdimen       = magicconstants.maxdimen
+local runningrule    = magicconstants.runningrule
+
+local pos_h          = 0
+local pos_v          = 0
+local pos_r          = lefttoright_code
+local shippingmode   = "none"
+
+local shipbox_h      = 0
+local shipbox_v      = 0
+local page_size_h    = 0
+local page_size_v    = 0
+
+local initialize
+local finalize
+local updatefontstate
+local pushorientation
+local poporientation
+local flushcharacter
+local flushfontchar
+local flushrule
+local flushliteral
+local flushwhatsit
+
+-- make local
+
+function drivers.getpos () return round(pos_h), round(pos_v) end
+function drivers.getrpos() return round(pos_h), round(pos_v), pos_r end
+function drivers.gethpos() return round(pos_h) end
+function drivers.getvpos() return round(pos_v) end
+
+-- characters
+
+local flush_character do
+
+    local stack   = setmetatableindex("table")
+    local level   = 0
+    local nesting = 0
+    local main    = 0
+
+    -- experiment (smaller page stream but might be fragile)
+
+    local tospace = false  directives.register("backends.spaces", function(v) tospace = v end)
+
+    -- todo: cache streams
+
+    local default = 16384 -- * number.dimenfactors.bp -- 65536 // 4
+
+    local vfinjectors = fonts.helpers.vfinjectors
+
+    -- current can go
+
+    local function flush_vf_packet(current,pos_h,pos_v,pos_r,font,char,data,csx,csy,factor,sx,sy,vfcommands)
+        if nesting > 100 then
+            return
+        elseif nesting == 0 then
+            main = font
+        end
+
+        nesting = nesting + 1
+
+        local saved_h = pos_h
+        local saved_v = pos_v
+        local saved_r = pos_r
+                pos_r = lefttoright_code
+
+        local fdata   = fontdata[font] -- offsets etc
+        local fnt     = font
+        local fonts   = fdata.fonts
+        local siz     = (fdata.parameters.factor or 1)/65536
+
+        -- An alternative where we (here) locally define handlers like this:
+        --
+        -- if not vfinjectors then
+        --     function vfinjectors.char(hpos,vpos,packet)
+        --         -- .... access: font, char, factor, sx, xy
+        --     end
+        -- end
+        --
+        -- doesn't work because accessing the parameters passed to the outer function doesn't
+        -- work as expected (so we end up in a nesting loop). I remember hitting this somewhat
+        -- unexpected feature before.
+
+        local scale   = data.scale
+        local xoffset = data.xoffset
+        local yoffset = data.yoffset
+
+        if scale then
+            sx = scale * sx
+            sy = scale * sy
+        end
+
+     -- -- example of usage needed (nested vf)
+
+        if csx then
+            sx = sx * csx
+            csx = 1
+        end
+        if csy then
+            sy = sy * csy
+            csy = 1
+        end
+
+        if xoffset and xoffset ~= 0 then
+            if factor ~= 0 then
+                xoffset = xoffset + xoffset * factor / refactored -- expansion
+            end
+            pos_h = pos_h + xoffset * sx
+        end
+
+        if yoffset and yoffset ~= 0 then
+            pos_v = pos_v + yoffset * sy
+        end
+
+        -- we assume resolved fonts: id mandate but maybe also size
+
+        local function flushchar(fnt,chr,csx,csy) -- can't be moved out of the function due to binding locals
+            if fnt then                           -- to the function variables etc etc ... kind of messy
+                local nest = char ~= chr or font ~= fnt
+                if fnt == 0 then
+                    fnt = main
+                end
+                if csx then
+                    csx = csx * sx
+else
+    csx = sx
+                end
+                if csy then
+                    csy = csy * sy
+else
+    csy = sy
+                end
+                -- here no current!
+                return flush_character(false,fnt,chr,factor,nest,pos_h,pos_v,pos_r,csx,csy)
+            else
+                return 0
+            end
+        end
+
+        local refactored = 1000000
+        for i=1,#vfcommands do
+            local packet  = vfcommands[i]
+            local command = packet[1]
+            if command == "char" then
+                local chr = packet[2]
+                local csx = packet[3]
+                local csy = packet[4] or csx
+                pos_h = pos_h + flushchar(fnt,chr,csx,csy)
+            elseif command == "slot" then
+                local index = packet[2]
+                local chr   = packet[3]
+                local csx   = packet[4]
+                local csy   = packet[5] or csx
+                if index == 0 then
+                    pos_h = pos_h + flushchar(font,chr,csx,csy)
+                else
+                    local okay = fonts and fonts[index]
+                    if okay then
+                        local fnt = okay.id
+                        if fnt then
+                            pos_h = pos_h + flushchar(fnt,chr,csx,csy)
+                        end
+                    else
+                        -- safeguard, we assume the font itself (often index 1)
+                        pos_h = pos_h + flushchar(font,chr,csx,csy)
+                    end
+                end
+            elseif command == "use" then
+                local index = packet[2]
+                if index then
+                    local fnt
+                    if index == 0 then
+                        fnt = font
+                    else
+                        local okay = fonts and fonts[index]
+                        if okay then
+                            fnt = okay.id
+                        end
+                    end
+                    if fnt then
+                        -- not efficient but ok for now as experiment
+                        local d = characters[fnt]
+                        if d then
+                            for i=3,#packet do
+                                local chr = packet[i]
+                                local dat = d[chr]
+                                if dat then
+                                    flushfontchar(fnt,chr,dat)
+                                end
+                            end
+                        end
+                    end
+                end
+            elseif command == "right" then
+                local h = packet[2] -- already scaled
+                if h ~= 0 then
+                    if factor ~= 0 then
+                        h = h + h * factor / refactored -- expansion
+                    end
+                    pos_h = pos_h + h * sx
+                end
+            elseif command == "left" then
+                local h = packet[2] -- already scaled
+                if h ~= 0 then
+                    if factor ~= 0 then
+                        h = h + h * factor / refactored -- expansion
+                    end
+                    pos_h = pos_h - h * sx
+                end
+            elseif command == "down" then
+                local v = packet[2] -- already scaled
+                if v and v ~= 0 then
+                    pos_v = pos_v - v * sy
+                end
+            elseif command == "up" then
+                local v = packet[2] -- already scaled
+                if v and v ~= 0 then
+                    pos_v = pos_v + v * sy
+                end
+            elseif command == "offset" then
+                local c = packet[4]
+                if c then
+                    local ph  = pos_h
+                    local pv  = pos_v
+                    local csx = packet[5]
+                    local csy = packet[6] or csx
+                    local h   = packet[2]
+                    local v   = packet[3]
+                    if h and h ~= 0 then
+                        if factor ~= 0 then
+                            h = h + h * factor / refactored -- expansion
+                        end
+                        pos_h = pos_h + h * sx
+                    end
+                    if v and v ~= 0 then
+                        pos_v = pos_v + v * sy
+                    end
+                    flushchar(fnt,c,csx,csy)
+                    pos_h = ph
+                    pos_v = pv
+                end
+            elseif command == "compose" then -- for now idem
+                local ph = pos_h
+                local pv = pos_v
+                local h = packet[2] or 0
+                local v = packet[3] or 0
+                local c = packet[4]
+                if h ~= 0 then
+                    if factor ~= 0 then
+                        h = h + h * factor / refactored -- expansion
+                    end
+                    pos_h = pos_h + h * sx
+                end
+                if v and v ~= 0 then
+                    pos_v = pos_v + v * sy
+                end
+                if c then
+                    flushchar(fnt,c)
+                    pos_h = ph
+                    pos_v = pv
+                end
+            elseif command == "push" then
+                level = level + 1
+                local s = stack[level]
+                s[1] = pos_h
+                s[2] = pos_v
+            elseif command == "pop" then
+                if level > 0 then
+                    local s = stack[level]
+                    pos_h = s[1]
+                    pos_v = s[2]
+                    level = level - 1
+                end
+            elseif command == "frame" then
+                -- d:width d:height d:depth d:rulethickness b:outline b:advance b:baseline s:color
+                local width  = packet[2]
+                local height = packet[3]
+                local depth  = packet[4]
+                local wd, ht, dp
+                if width == true or height == true or depth == true then
+                    wd, ht, dp = getwhd(current,true)
+                end
+                if width == true then
+                    width = wd
+                elseif not width then
+                    width = 0
+                end
+                if height == true then
+                    height = ht
+                elseif not height then
+                    height = 0
+                end
+                if depth == true then
+                    depth = dp
+                elseif not depth then
+                    depth = 0
+                end
+                local total = height + depth
+                if width > 0 and total > 0 then
+                    if factor ~= 0 then
+                        width = width + width * factor / refactored
+                    end
+                    if width > 0 then
+                        local line    = packet[5] or default
+                        local outline = packet[6]
+                        local advance = packet[7]
+                        if outline == nil then
+                            outline = true
+                        end
+                        if advance == nil then
+                            advance = true
+                        end
+                        local baseline = outline and packet[8]
+                        local color    = packet[9] -- no longer needed probably
+                        if color then
+                            vfinjectors.startcolor(pos_h,pos_v,color) -- takes packet or string
+                        end
+                        width  = width  * sx
+                        height = height * sy
+                        depth  = depth  * sy
+                        flushspecialrule(pos_h,pos_v,pos_r,width,height,depth,line,outline,baseline)
+                        if color then
+                            vfinjectors.stopcolor()
+                        end
+                        if advance then
+                            pos_h = pos_h + width
+                        end
+                    end
+                end
+            elseif command == "rule" then
+                local size_v = packet[2]
+                local size_h = packet[3]
+                if size_h > 0 and size_v > 0 then
+                    if factor ~= 0 then
+                        size_h = size_h + size_h * factor / refactored
+                    end
+                    if size_h > 0 then
+                        size_h = size_h * sx
+                        size_v = size_v * sy
+                        flushsimplerule(pos_h,pos_v,pos_r,size_h,size_v)
+                        pos_h = pos_h + size_h
+                    end
+                end
+            elseif command == "line" then
+                local wd = packet[2] or 0
+                local ht = packet[3] or 0
+                local dp = packet[4] or 0
+                if wd > 0 and ht ~= 0 and dp ~= 0 then
+                    if factor ~= 0 then
+                        wd = wd + wd * factor / refactored
+                    end
+                    if wd > 0 then
+                        wd = wd * sx
+                        ht = ht * sy
+                        dp = dp * sy
+                        local color = packet[5] -- no longer needed probably
+                        if color then
+                            vfinjectors.startcolor(pos_h,pos_v,color) -- takes packet or string
+                        end
+                        flushsimplerule(pos_h,pos_v-dp,pos_r,wd,ht+dp)
+                        if color then
+                            vfinjectors.stopcolor()
+                        end
+                        pos_h = pos_h + wd
+                    end
+                end
+            elseif command == "font" then
+                local index = packet[2]
+                local okay  = fonts and fonts[index]
+                if okay then
+                    fnt = okay.id or fnt -- or maybe just return
+                end
+            elseif command == "lua" then
+                local code = packet[2]
+                local kind = type(code)
+                if kind ~= "function" then
+                    code = loadstring(code)
+                    kind = type(code)
+                end
+                if kind == "function" then
+                    code(font,char,pos_h,pos_v,sx,sy) -- maybe also packet
+                end
+            elseif command == "node" then
+                local h = packet[2]
+                hlist_out(h,getlist(h))
+         -- elseif command == "pdf" then
+                -- unsupported
+         -- elseif command == "pdfmode" then
+                -- unsupported
+         -- elseif command == "special" then
+                -- unsupported
+         -- elseif command == "nop"     then
+                -- just ignored
+         -- elseif command == "image"   then
+                -- unsupported, use "node"
+            else
+                local injector = vfinjectors[command]
+                if injector then
+                    injector(pos_h,pos_v,packet) -- maybe also sx, sy but then we need to check usage
+                end
+            end
+        end
+
+        -- hm, never seen outside here
+
+        pos_h = saved_h
+        pos_v = saved_v
+        pos_r = saved_r
+
+        nesting = nesting - 1
+    end
+
+    local onetimemessage -- could be defined later (todo: make plug for this)
+
+    flush_character = function(current,font,char,factor,vfcommands,pos_h,pos_v,pos_r,csx,csy)
+
+        if font ~= lastfont then
+            lastfont       = font
+            fontcharacters = characters[font]
+            updatefontstate(font) -- can move to lpdf-lmt, cleaner
+        end
+
+        local data = fontcharacters[char]
+        if not data then
+            if char > 0 then
+                if not onetimemessage then
+                    onetimemessage = fonts.loggers.onetimemessage
+                end
+                onetimemessage(font,char,"missing")
+            end
+            return 0, 0, 0
+        end
+
+        if vfcommands then
+            vfcommands = data.commands
+        end
+        local width, height, depth, naturalwidth, sx, sy
+        if current then
+            -- height and depth not needed
+            if true then
+                width, height, depth, factor, sx, sy = getglyphdimensions(current)
+            else
+                naturalwidth, height, depth, factor = getwhd(current,true) -- also get corrected width
+                sx, sy = getxyscales(current)
+                if factor == 0 then
+                    width = naturalwidth
+                else
+                 -- width = (1.0 + factor/1000000.0) * naturalwidth
+                    width = naturalwidth + naturalwidth * factor/1000000.0
+                 -- width = naturalwidth + naturalwidth * 0.000001 * factor
+                end
+            end
+        else
+            width  = data.width or 0
+            height = data.height or 0
+            depth  = data.depth or 0
+            naturalwidth = width
+            if not factor then
+                factor = 0
+            end
+            sx = 1
+            sy = 1
+        end
+        if pos_r == righttoleft_code then
+            pos_h = pos_h - width -- here ?
+        end
+        if vfcommands then
+            flush_vf_packet(current,pos_h,pos_v,pos_r,font,char,data,csx,csy,factor,sx,sy,vfcommands)
+        else
+            local orientation = data.orientation -- 0 (none), 1, 2, 3 or 4 (none)
+            if orientation and (orientation == 1 or orientation == 3) then
+                -- we can get weird charactersbox tracing here
+                pushorientation(orientation,pos_h,pos_v)
+                flushcharacter(current,pos_h,pos_v,pos_r,font,char,data,csx,csy,factor,sx,sy)
+                poporientation(orientation,pos_h,pos_v)
+            else
+                flushcharacter(current,pos_h,pos_v,pos_r,font,char,data,csx,csy,factor,sx,sy)
+            end
+        end
+        return width, height, depth
+    end
+
+end
+
+-- end of characters
+
+local function reset_state()
+    pos_h         = 0
+    pos_v         = 0
+    pos_r         = lefttoright_code
+    shipbox_h     = 0
+    shipbox_v     = 0
+    shippingmode  = "none"
+    page_size_h   = 0
+    page_size_v   = 0
+end
+
+-- local function dirstackentry(t,k)
+--     local v = {
+--         cur_h = 0,
+--         cur_v = 0,
+--         ref_h = 0,
+--         ref_v = 0,
+--     }
+--     t[k] = v
+--     return v
+-- end
+--
+-- local  dirstack = setmetatableindex(dirstackentry)
+--
+-- local function reset_directions()
+--     dirstack = setmetatableindex(dirstackentry)
+-- end
+
+local dirstack = { }
+local anchors  = { }
+local befores  = setmetatableindex("table")
+local afters   = setmetatableindex("table")
+local stired   = false
+
+local function reset_directions()
+    dirstack = { }
+end
+
+local function reset_anchors()
+    anchors = { }
+end
+
+interfaces.implement {
+    name      = "registeranchorbox",
+    public    = true,
+    protected = true,
+    arguments = { "integer", "integer", "box" },
+    actions   = function(anchor,where,box)
+        box = tonut(box)
+        if where < 0 then
+            insert(befores[anchor],box)
+        else
+            insert(afters[anchor],box)
+        end
+        stored = true
+    end
+}
+
+local hlist_out, vlist_out  do
+
+    local finalize  = nodes.handlers.finalizelist
+    local flushnode = nuts.flushnode
+
+    local function flushstored(current,source,before)
+        local s = nil
+        if before then
+            s = rawget(befores,source)
+        else
+            s = rawget(afters,source)
+        end
+        if s then
+            for i=1,#s do
+                local si = s[i]
+                if si then
+                    finalize(si) -- tricky: we might need to group
+                    if getid(si) == vlist_code then
+                        vlist_out(current,si)
+                    else
+                        hlist_out(current,si)
+                    end
+                    flushnode(si)
+                    s[i] = false
+                end
+            end
+            if before then
+                rawset(befores,source,nil)
+            else
+                rawset(afters,source,nil)
+            end
+        end
+    end
+
+    local function applyorientation(orientation,x,y,width,height,depth,woffset,hoffset,doffset,xoffset,yoffset)
+        local ot = (orientation >> 0) & 0x0F
+        local ay = (orientation >> 4) & 0x0F
+        local ax = (orientation >> 8) & 0x0F
+        if ot == 4 then
+            ot, ay = 0, 1
+        elseif ot == 5 then
+            ot, ay = 0, 2
+        end
+        if ot == 0 or ot == 2 then
+            if     ax == 1 then x = x - width
+            elseif ax == 2 then x = x + width
+            elseif ax == 3 then x = x - width/2
+            elseif ax == 4 then x = x + width/2
+            end
+            if ot == 2 then
+                doffset, hoffset = hoffset, doffset
+            end
+            if     ay == 1 then y = y - doffset
+            elseif ay == 2 then y = y + hoffset
+            elseif ay == 3 then y = y + (doffset + hoffset)/2 - doffset
+            end
+        elseif ot == 1 or ot == 3 then
+            if     ay == 1 then y = y - height
+            elseif ay == 2 then y = y + height
+            elseif ay == 3 then y = y - height/2
+            end
+            if ot == 1 then
+                doffset, hoffset = hoffset, doffset
+            end
+            if     ax == 1 then x = x - width
+            elseif ax == 2 then x = x + width
+            elseif ax == 3 then x = x - width/2
+            elseif ax == 4 then x = x + width/2
+            elseif ax == 5 then x = x - hoffset
+            elseif ax == 6 then x = x + doffset
+            end
+        end
+        return ot, x + xoffset, y - yoffset
+    end
+
+    local function applyanchor(anchor,shift,anchor_h,anchor_v,width,height,depth)
+        local h = 0
+        local v = 0
+        if shift then
+            anchor = (anchor & 0xFFFF0000) >> 16
+        else
+            anchor = (anchor & 0x0000FFFF)
+        end
+        local a = anchor & 0x00FF
+        local s = anchor & 0x0F00
+        if a == 0x02 then
+            v = height
+        elseif a == 0x03 then
+            v = - depth
+        elseif a == 0x04 then
+            h = width
+        elseif a == 0x05 then
+            h = width
+            v = height
+        elseif a == 0x06 then
+            h = width
+            v = - depth
+        elseif a == 0x07 then
+            h = width/2
+        elseif a == 0x08 then
+            h = width/2
+            v = height
+        elseif a == 0x09 then
+            h = width/2
+            v = - depth
+        elseif a == 0x0A then -- halfway_total_anchor
+            h = width/2
+            v = height/2 - depth/2
+        elseif a == 0x0B then -- halfway_height_anchor
+            h = width/2
+            v = height/2
+        elseif a == 0x0C then -- halfway_depth_anchor
+            h = width/2
+            v = - depth/2
+        elseif a == 0x0D then -- halfway_left_anchor
+            v = height/2 - depth/2
+        elseif a == 0x0E then -- halfway_right_anchor
+            h = width
+            v = height/2 - depth/2
+        end
+        if not shift then
+            h = -h
+            v = -v
+        end
+        if s == 0x100 then
+            h = -h
+        elseif s == 0x200 then
+            v = -v
+        elseif s == 0x300 then
+            h = -h
+            v = -v
+        else
+        end
+        anchor_h = anchor_h + h
+        anchor_v = anchor_v + v
+        return anchor_h, anchor_v
+    end
+
+    drivers.applyanchor      = applyanchor
+    drivers.applyorientation = applyorientation
+
+    -- to be checked: begin- or enddir kan nil zijn, weird
+
+    -- check frequencies of nodes
+
+    local eps <const> = 10
+
+    hlist_out = function(this_box,current)
+        local ref_h = pos_h
+        local ref_v = pos_v
+        local ref_r = pos_r
+              pos_r = getdirection(this_box)
+        local boxwidth,
+              boxheight,
+              boxdepth = getwhd(this_box)
+
+        local cur_h = 0
+     -- local cur_v = 0
+
+     -- if not current then
+     --     current = getlist(this_box)
+     -- end
+
+        -- we can encounter par, boundary and penalty nodes but a special
+        -- iterator over content nodes won't save much
+        for current, id, subtype in nextnode, current do
+            if id == glyph_code then
+                local char, font = isglyph(current)
+                local x_offset, y_offset, left, right, raise = getoffsets(current)
+                if x_offset ~= 0 or y_offset ~= 0 then
+                    if pos_r == righttoleft_code then
+                        pos_h = ref_h - (cur_h + x_offset)
+                    else
+                        pos_h = ref_h + (cur_h + x_offset)
+                    end
+                 -- pos_v = ref_v - (cur_v - y_offset)
+                    pos_v = ref_v + y_offset
+                    -- synced
+                end
+                pos_v = pos_v + raise
+                pos_h = pos_h - left
+                local wd = flush_character(current,font,char,false,true,pos_h,pos_v,pos_r)
+             -- cur_h = cur_h + wd - right -- hm, no left here?
+                cur_h = cur_h + wd -- see new tabulate alignment code
+            elseif id == glue_code then
+                local gluewidth = effectiveglue(current,this_box)
+                if gluewidth ~= 0 then
+                    if subtype >= leaders_code then
+                        local leader = getleader(current)
+                        if leader then
+                            local id = getid(leader)
+                            if id == rule_code then
+                                if gluewidth > 0 then
+                                    local width, height, depth = getwhd(leader)
+                                    if height == runningrule then
+                                        height = boxheight
+                                    end
+                                    if depth == runningrule then
+                                        depth = boxdepth
+                                    end
+                                    local total = height + depth
+                                    if total > 0 then
+                                        if pos_r == righttoleft_code then
+                                            pos_h = pos_h - gluewidth
+                                        end
+                                        pos_v = pos_v - depth
+                                        flushrule(leader,pos_h,pos_v,pos_r,gluewidth,total,getsubtype(leader))
+                                    end
+                                    cur_h = cur_h + gluewidth
+                                end
+                            elseif (id == hlist_code or id == vlist_code or id == glyph_code) and gluewidth > 0 then
+                                local width, height, depth = getwhd(leader)
+                                -- no need for //
+                                if width > 0 then
+                                    gluewidth = gluewidth + eps
+                                    local edge = cur_h + gluewidth
+                                    local lx = 0
+                                    if subtype == gleaders_code then
+                                        local save_h = cur_h
+                                        if pos_r == righttoleft_code then
+                                            cur_h = ref_h - shipbox_h + cur_h
+                                            cur_h = width * (cur_h / width)
+                                            cur_h = ref_h - shipbox_h - cur_h
+                                        else
+                                            cur_h = ref_h - shipbox_h - cur_h
+                                            cur_h = width * (cur_h / width)
+                                            cur_h = ref_h - shipbox_h - cur_h
+                                        end
+                                        if cur_h < save_h then
+                                            cur_h = cur_h + width
+                                        end
+                                    elseif subtype == leaders_code then
+                                        local save_h = cur_h
+                                        cur_h = width * (cur_h / width)
+                                        if cur_h < save_h then
+                                            cur_h = cur_h + width
+                                        end
+                                    else
+                                        lq = gluewidth / width
+                                        lr = gluewidth % width
+                                        if subtype == cleaders_code then
+                                            cur_h = cur_h + lr / 2
+                                        else
+                                            lx = lr / (lq + 1)
+                                            cur_h = cur_h + (lr - (lq - 1) * lx) / 2
+                                        end
+                                    end
+                                    if id == glyph_code then
+                                        local char, font = isglyph(leader)
+                                        local x_offset, y_offset, left, right, raise = getoffsets(leader)
+                                        local h = ref_h
+                                        local v = ref_v
+                                        if x_offset ~= 0 or y_offset ~= 0 then
+                                            if pos_r == righttoleft_code then
+                                                h = h - x_offset
+                                            else
+                                                h = h + x_offset
+                                            end
+                                            v = v + y_offset
+                                        end
+                                        v = v + raise
+                                        h = h - left
+                                        local basepoint_h = 0
+                                        if boxdir ~= pos_r then
+                                            basepoint_h = boxwidth
+                                        end
+                                        if pos_r == righttoleft_code then
+                                            pos_h = h - basepoint_h
+                                        else
+                                            pos_h = h + basepoint_h
+                                        end
+                                        while cur_h + width <= edge do
+                                            if pos_r == righttoleft_code then
+                                                pos_h = h - cur_h
+                                            else
+                                                pos_h = h + cur_h
+                                            end
+                                            pos_v = v
+                                            flush_character(leader,font,char,false,true,pos_h,pos_v,pos_r)
+                                            cur_h = cur_h + width + lx
+                                        end
+                                    else
+                                        local shift  = isglyph and 0 or getshift(leader)
+                                        local boxdir = getdirection(leader) or lefttoright_code
+                                        pushleaderlevel()
+                                        while cur_h + width <= edge do
+                                            -- todo: move some out of loop as above
+                                            local basepoint_h = 0
+                                         -- local basepoint_v = shift
+                                            if boxdir ~= pos_r then
+                                                basepoint_h = boxwidth
+                                            end
+                                            -- synch_pos_with_cur(ref_h,ref_v,cur_h + basepoint_h,shift)
+                                            if pos_r == righttoleft_code then
+                                                pos_h = ref_h - (cur_h + basepoint_h)
+                                            else
+                                                pos_h = ref_h + (cur_h + basepoint_h)
+                                            end
+                                            pos_v = ref_v - shift
+                                            -- synced
+                                            if id == vlist_code then
+                                                vlist_out(leader,getlist(leader))
+                                            else
+                                                hlist_out(leader,getlist(leader))
+                                            end
+                                            cur_h = cur_h + width + lx
+                                        end
+                                        popleaderlevel()
+                                    end
+                                    cur_h = edge - eps
+                                else
+                                    cur_h = cur_h + gluewidth
+                                end
+                            else
+                                -- maybe some day also glyphs
+                                cur_h = cur_h + gluewidth
+                            end
+                        else
+                            cur_h = cur_h + gluewidth
+                        end
+                    else
+                        if tospace and subtype == spaceskip_code then
+                         -- kind of tricky because because we can have a different sx sy
+                            flush_character(false,getfont(current),32,false,true,pos_h,pos_v,pos_r) -- we need to pass current for scale?
+                        end
+                        cur_h = cur_h + gluewidth
+                    end
+                end
+            elseif id == hlist_code or id == vlist_code then
+                local width, height, depth = getwhd(current)
+                local list = getlist(current)
+                if list then
+                    local boxdir = getdirection(current) or lefttoright_code
+                    local shift  = getshift(current)
+                    local geometry, hasoffset, hasorientation, hasanchor = getgeometry(current,true)
+                    local anchor, source, target, targetdata
+                    local anc_h, anc_v
+                    local usedorientation = false
+                    if hasanchor then
+                        anchor, source, target = getanchors(current)
+                    end
+                    if hasorientation then
+                        local orientation, xoffset, yoffset, woffset, hoffset, doffset = getorientation(current)
+                        local orientation, basepoint_h, basepoint_v = applyorientation(orientation,0,shift,width,height,depth,woffset,hoffset,doffset,xoffset,yoffset)
+                        if orientation == 1 then
+                            basepoint_h = basepoint_h + doffset
+                            if boxdir == pos_r then
+                                basepoint_v = basepoint_v - height
+                            end
+                            usedorientation = orientation
+                        elseif orientation == 2 then
+                            if boxdir == pos_r then
+                                basepoint_h = basepoint_h + width
+                            end
+                            usedorientation = orientation
+                        elseif orientation == 3 then
+                            basepoint_h = basepoint_h + hoffset
+                            if boxdir ~= pos_r then
+                                basepoint_v = basepoint_v - height
+                            end
+                            usedorientation = orientation
+                        end
+                        if target then
+                            targetdata = anchors[target]
+                            if targetdata then
+                                anc_h =   basepoint_h
+                                anc_v = - basepoint_v
+                                goto posdone
+                            end
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - (cur_h + basepoint_h)
+                        else
+                            pos_h = ref_h + (cur_h + basepoint_h)
+                        end
+                     -- pos_v = ref_v - (cur_v + basepoint_v)
+                        pos_v = ref_v - basepoint_v
+                    elseif hasoffset then
+--                         local orientation, xoffset, yoffset = getorientation(current)
+                        local xoffset, yoffset = getoffsets(current)
+                        local basepoint_h = boxdir ~= pos_r and width or 0
+                        local basepoint_v = shift
+                        if target then
+                            targetdata = anchors[target]
+                            if targetdata then
+                                anc_h = xoffset + basepoint_h
+                                anc_v = yoffset - basepoint_v
+                                goto posdone
+                            end
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - (cur_h + basepoint_h + xoffset)
+                        else
+                            pos_h = ref_h + (cur_h + basepoint_h + xoffset)
+                        end
+                        pos_v = ref_v - (basepoint_v - yoffset)
+                    elseif hasanchor then
+                        local basepoint_h = boxdir ~= pos_r and width or 0
+                        local basepoint_v = shift
+                        if target then
+                            targetdata = anchors[target]
+                            if targetdata then
+                                anc_h =   basepoint_h
+                                anc_v = - basepoint_v
+                                goto posdone
+                            end
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - (cur_h + basepoint_h)
+                        else
+                            pos_h = ref_h + (cur_h + basepoint_h)
+                        end
+                        pos_v = ref_v - basepoint_v
+                    else
+                        local basepoint_h = boxdir ~= pos_r and width or 0
+                        local basepoint_v = shift
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - (cur_h + basepoint_h)
+                        else
+                            pos_h = ref_h + (cur_h + basepoint_h)
+                        end
+                        pos_v = ref_v - basepoint_v
+                    end
+                    goto process
+                  ::posdone::
+                    if pos_r == righttoleft_code then
+                        pos_h = targetdata[1] - anc_h
+                    else
+                        pos_h = targetdata[1] + anc_h
+                    end
+                    pos_v = targetdata[2] + anc_v
+                    if anchor and anchor > 0 then
+                        pos_h, pos_v = applyanchor(anchor,true,pos_h,pos_v,targetdata[3],targetdata[4],targetdata[5])
+                        pos_h, pos_v = applyanchor(anchor,false,pos_h,pos_v,width,height,depth)
+                    end
+                  ::process::
+                    if source then
+                        local anchor_h = pos_h
+                        local anchor_v = pos_v
+                        if usedorientation then
+                            if usedorientation == 1 then
+                                anchor_v = anchor_v - (width - height)
+                            elseif usedorientation == 2 then
+                                anchor_v = anchor_v - (depth - height)
+                            elseif usedorientation == 3 then -- weird
+                                anchor_v = anchor_v + (height - width)
+                            end
+                        end
+                        anchors[source] = { anchor_h, anchor_v, width, height, depth }
+                    end
+                    if usedorientation then
+                        pushorientation(usedorientation,pos_h,pos_v,pos_r)
+                    end
+                    if source and stored then
+                        flushstored(current,source,true)
+                    end
+                    if id == vlist_code then
+                        vlist_out(current,list)
+                    else
+                        hlist_out(current,list)
+                    end
+                    if source and stored then
+                        flushstored(current,source,false)
+                    end
+                    if usedorientation then
+                        poporientation(usedorientation,pos_h,pos_v,pos_r)
+                    end
+                end
+                cur_h = cur_h + width
+            elseif id == kern_code then
+                -- when we use getkerndimension we get rounded values
+                if true then
+                    local kern = getkerndimension(current)
+                    if kern ~= 0 then
+                        cur_h = cur_h + kern
+                    end
+                else
+                   local kern, factor = getkern(current,true)
+                   if kern ~= 0 then
+                       if factor ~= 0 then
+                           cur_h = cur_h + (1.0 + factor/1000000.0) * kern
+                       else
+                           cur_h = cur_h + kern
+                       end
+                   end
+                end
+            elseif id == rule_code then
+                local width, height, depth = getwhd(current)
+                if width > 0 then
+                    if height == runningrule then
+                        height = boxheight
+                    end
+                    if depth == runningrule then
+                        depth = boxdepth
+                    end
+                    local total = height + depth
+                    if total > 0 then
+                        local xoffset, yoffset, top, bottom = getoffsets(current)
+                        if pos_r == righttoleft_code then
+                            pos_h   = pos_h - width
+                            xoffset = - xoffset
+                        end
+                        if top ~= 0 then
+                         -- height = height - top
+                            total  = total - top
+                        end
+                        if bottom ~= 0 then
+                            depth = depth - bottom
+                            total = total - bottom
+                        end
+                        pos_v = pos_v - depth
+                        flushrule(current,pos_h + xoffset,pos_v + yoffset,pos_r,width,total,subtype)
+                    end
+                end
+                -- move into above if
+                cur_h = cur_h + width
+            elseif id == math_code then
+             -- local kern = getkern(current)
+             -- if kern ~= 0 then
+             --     cur_h = cur_h + kern
+             -- else
+                  cur_h = cur_h + effectiveglue(current,this_box)
+             -- end
+            elseif id == dir_code then
+             -- We normally have proper begin-end pairs. A begin without end is (silently) handled
+             -- and an end without a begin will be (silently) skipped we only need to move forward
+             -- so we then have a faster calculation.
+                local dir, cancel = getdirection(current)
+                if cancel then
+                    local ds = dirstack[current]
+                    if ds then
+                        ref_h = ds.ref_h
+                        ref_v = ds.ref_v
+                        cur_h = ds.cur_h
+                     -- cur_v = ds.cur_v
+                    else
+                        -- pardir
+                    end
+                    pos_r = dir
+                else
+                    local width, enddir = dirdimensions(this_box,current)
+                    local new_h = cur_h + width
+                    if dir ~= pos_r then
+                        cur_h = new_h
+                    end
+                    if enddir ~= current then
+                        dirstack[enddir] = {
+                            cur_h = new_h,
+                         -- cur_v = cur_v,
+                            ref_h = ref_h,
+                            ref_v = ref_v,
+                        }
+                        setdirection(enddir,pos_r)
+                    end
+                    if pos_r == righttoleft_code then
+                        pos_h = ref_h - cur_h
+                    else
+                        pos_h = ref_h + cur_h
+                    end
+                 -- pos_v = ref_v - cur_v
+                    pos_v = ref_v
+                    -- synced
+                    ref_h = pos_h
+                    ref_v = pos_v
+                    cur_h = 0
+                 -- cur_v = 0
+                    pos_r = dir
+                    goto synced
+                end
+            elseif id == whatsit_code then
+                flushwhatsit[subtype](current,pos_h,pos_v)
+            elseif id == disc_code then
+                local replace, tail = getreplace(current)
+                -- actually, we no longer have these select discs in the packaged list ... it's about
+                -- time to clean up the disc code a bit further
+                if replace then -- and subtype ~= select_disc_code then
+                    setlink(tail,getnext(current))
+                    setlink(current,replace)
+                    setreplace(current)
+                end
+         -- elseif id == par_code and startofpar(current) then
+         --     local pardir = getdirection(current) or lefttoright_code
+         --     if pardir == righttoleft_code then
+         --     end
+         -- end
+            else
+                -- penalty, boundary ... no dimensions
+                goto synced
+            end
+            -- There is no gain in skipping over this when we have zero progression
+            -- and such.
+            if pos_r == righttoleft_code then
+                pos_h = ref_h - cur_h
+            else
+                pos_h = ref_h + cur_h
+            end
+         -- pos_v = ref_v - cur_v
+            pos_v = ref_v
+            ::synced::
+        end
+        pos_h = ref_h
+        pos_v = ref_v
+        pos_r = ref_r
+    end
+
+    vlist_out = function(this_box,current)
+        local ref_h = pos_h
+        local ref_v = pos_v
+        local ref_r = pos_r
+              pos_r = getdirection(this_box)
+
+        local boxwidth,
+              boxheight,
+              boxdepth = getwhd(this_box)
+
+        local cur_h    = 0 -- needs checking .. needed ?
+        local cur_v    = - boxheight
+        local top_edge = cur_v
+
+     -- if pos_r == righttoleft_code then
+     --     pos_h = ref_h - cur_h
+     -- else
+     --     pos_h = ref_h + cur_h
+     -- end
+        pos_h = ref_h
+        pos_v = ref_v - cur_v
+        -- synced
+
+     -- if not current then
+     --     current = getlist(this_box)
+     -- end
+
+     -- while current do
+     --     local id = getid(current)
+        for current, id, subtype in nextnode, current do
+            if id == glue_code then
+                local glueheight = effectiveglue(current,this_box)
+                if glueheight ~= 0 then
+                    if subtype >= leaders_code then
+                        local leader = getleader(current)
+                        if leader then
+                            local width, height, depth = getwhd(leader)
+                            local total = height + depth
+                            if getid(leader) == rule_code then
+                                depth = 0 -- hm
+                                total = glueheight -- forgotten ... needs testing
+                                if total > 0 then
+                                    if width == runningrule then
+                                        width = boxwidth
+                                    end
+                                    if width > 0 then
+                                        if pos_r == righttoleft_code then
+                                            cur_h = cur_h - width
+                                        end
+                                        flushrule(leader,pos_h,pos_v - total,pos_r,width,total,getsubtype(leader))
+                                    end
+                                    cur_v = cur_v + total
+                                end
+                            elseif total > 0 and glueheight > 0 then
+                                glueheight = glueheight + 10
+                                local edge = cur_v + glueheight
+                                local ly   = 0
+                                if subtype == gleaders_code then
+                                    save_v = cur_v
+                                    cur_v  = ref_v - shipbox_v - cur_v
+                                    cur_v  = total * (cur_v // total)
+                                    cur_v  = ref_v - shipbox_v - cur_v
+                                    if cur_v < save_v then
+                                        cur_v = cur_v + total
+                                    end
+                                elseif subtype == leaders_code then -- aleader
+                                    save_v = cur_v
+                                    cur_v = top_edge + total * ((cur_v - top_edge) // total)
+                                    if cur_v < save_v then
+                                        cur_v = cur_v + total
+                                    end
+                                else
+                                    lq = glueheight / total
+                                    lr = glueheight % total
+                                    if subtype == cleaders_code then
+                                        cur_v = cur_v + lr // 2
+                                    else
+                                        ly = lr // (lq + 1)
+                                        cur_v = cur_v + (lr - (lq - 1) * ly) // 2
+                                    end
+                                end
+                                local shift = getshift(leader)
+                                pushleaderlevel()
+                                while cur_v + total <= edge do -- todo: <= edge - total
+                                    -- synch_pos_with_cur(ref_h, ref_v, getshift(leader), cur_v + height)
+                                    if pos_r == righttoleft_code then
+                                        pos_h = ref_h - shift
+                                    else
+                                        pos_h = ref_h + shift
+                                    end
+                                    pos_v = ref_v - (cur_v + height)
+                                    -- synced
+                                    if getid(leader) == vlist_code then
+                                        vlist_out(leader,getlist(leader))
+                                    else
+                                        hlist_out(leader,getlist(leader))
+                                    end
+                                    cur_v = cur_v + total + ly
+                                end
+                                popleaderlevel()
+                                cur_v = edge - 10
+                            else
+                                cur_v = cur_v + glueheight
+                            end
+                        end
+                    else
+                        cur_v = cur_v + glueheight
+                    end
+                end
+            elseif id == hlist_code or id == vlist_code then
+                local width, height, depth = getwhd(current)
+                local list = getlist(current)
+                if list then
+                    local boxdir = getdirection(current) or lefttoright_code
+                    local shift = getshift(current)
+                    local geometry, hasoffset, hasorientation, hasanchor = getgeometry(current,true)
+                    local anchor, source, target, targetdata
+                    local usedorientation = false
+                    if hasanchor then
+                        anchor, source, target = getanchors(current)
+                    end
+                    if hasorientation then
+                        local orientation, xoffset, yoffset, woffset, hoffset, doffset = getorientation(current)
+                        local orientation, basepoint_h, basepoint_v = applyorientation(orientation,shift,height,width,height,depth,woffset,hoffset,doffset,xoffset,yoffset)
+                        if orientation == 1 then
+                            basepoint_h = basepoint_h + width - height -- hm
+                            basepoint_v = basepoint_v - height
+                            usedorientation = orientation
+                        elseif orientation == 2 then
+                            basepoint_h = basepoint_h + width
+                            basepoint_v = basepoint_v + depth - height
+                            usedorientation = orientation
+                        elseif orientation == 3 then -- weird
+                            basepoint_h = basepoint_h + height
+                            usedorientation = orientation
+                        end
+                        if target then
+                            targetdata = anchors[target]
+                            if targetdata then
+                                if pos_r == righttoleft_code then
+                                    pos_h = targetdata[1] - basepoint_h
+                                else
+                                    pos_h = targetdata[1] + basepoint_h
+                                end
+                                pos_v = targetdata[2] - basepoint_v
+                                goto posdone
+                            end
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - basepoint_h
+                        else
+                            pos_h = ref_h + basepoint_h
+                        end
+                        pos_v = ref_v - (cur_v + basepoint_v)
+                    elseif hasoffset then
+--                         local orientation, xoffset, yoffset = getorientation(current)
+                        local xoffset, yoffset = getoffsets(current)
+                     -- local basepoint_h = shift
+                     -- local basepoint_v = height
+                        if boxdir ~= pos_r then
+                            shift = shift + width
+                        end
+                        if target then
+                            targetdata = anchors[target]
+                            if targetdata then
+                                if pos_r == righttoleft_code then
+                                    pos_h = targetdata[1] - (shift + xoffset)
+                                else
+                                    pos_h = targetdata[1] + (shift + xoffset)
+                                end
+                                pos_v = targetdata[2] - (height - yoffset)
+                                goto posdone
+                            end
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - (shift + xoffset)
+                        else
+                            pos_h = ref_h + (shift + xoffset)
+                        end
+                        pos_v = ref_v - (cur_v + height - yoffset)
+                    elseif hasanchor then
+                     -- local basepoint_h = shift
+                     -- local basepoint_v = height
+                        if boxdir ~= pos_r then
+                            shift = shift + width
+                        end
+                        if target then
+                            local a = anchors[target]
+                            if a then
+                                if pos_r == righttoleft_code then
+                                    pos_h = targetdata[1] - shift
+                                else
+                                    pos_h = targetdata[1] + shift
+                                end
+                                pos_v = targetdata[2] - height
+                                goto posdone
+                            end
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - shift
+                        else
+                            pos_h = ref_h + shift
+                        end
+                        pos_v = ref_v - (cur_v + height)
+                    else
+                     -- local basepoint_h = shift
+                     -- local basepoint_v = height
+                        if boxdir ~= pos_r then
+                            shift = shift + width
+                        end
+                        if pos_r == righttoleft_code then
+                            pos_h = ref_h - shift
+                        else
+                            pos_h = ref_h + shift
+                        end
+                        pos_v = ref_v - (cur_v + height)
+                    end
+                    goto process
+                  ::posdone::
+                    if anchor and anchor > 0 then
+                        pos_h, pos_v = applyanchor(anchor,true,pos_h,pos_v,targetdata[3],targetdata[4],targetdata[5])
+                        pos_h, pos_v = applyanchor(anchor,false,pos_h,pos_v,width,height,depth)
+                    end
+                  ::process::
+                    if source then
+                        -- move this into apply_anchor
+                        local anchor_h = pos_h
+                        local anchor_v = pos_v
+                        if usedorientation then
+                            if usedorientation == 1 then
+                                anchor_v = anchor_v - (width - height)
+                            elseif usedorientation == 2 then
+                                anchor_v = anchor_v - (depth - height)
+                            elseif usedorientation == 3 then -- weird
+                                anchor_v = anchor_v + (height - width)
+                            end
+                        end
+                        anchors[source] = { anchor_h, anchor_v, width, height, depth }
+                    end
+                    if usedorientation then
+                        pushorientation(usedorientation,pos_h,pos_v,pos_r)
+                    end
+                    if source and stored then
+                        flushstored(current,source,true)
+                    end
+                    if id == vlist_code then
+                        vlist_out(current,list)
+                    else
+                        hlist_out(current,list)
+                    end
+                    if source and stored then
+                        flushstored(current,source,false)
+                    end
+                    if usedorientation then
+                        poporientation(usedorientation,pos_h,pos_v,pos_r)
+                    end
+                end
+                cur_v = cur_v + height + depth
+            elseif id == kern_code then
+                cur_v = cur_v + getkern(current)
+            elseif id == rule_code then
+                local width, height, depth = getwhd(current)
+                local total = height + depth
+                if total > 0 then
+                    if width == runningrule then
+                        width = boxwidth
+                    end
+                    if width > 0 then
+                        local xoffset, yoffset, left, right = getoffsets(current)
+                        if left ~= 0 then
+                            width = width - left
+                            xoffset = left
+                        end
+                        if right ~= 0 then
+                            width = width - right
+                        end
+                        if pos_r == righttoleft_code then
+                            xoffset = - xoffset - width
+                        end
+                        flushrule(current,pos_h + xoffset,pos_v - total - yoffset,pos_r,width,total,subtype)
+                    end
+                end
+                cur_v = cur_v + total
+            elseif id == whatsit_code then
+                flushwhatsit[subtype](current,pos_h,pos_v)
+            else
+                -- penalty
+                goto synced
+            end
+            if pos_r == righttoleft_code then
+                pos_h = ref_h - cur_h
+            else
+                pos_h = ref_h + cur_h
+            end
+            pos_v = ref_v - cur_v
+            ::synced::
+        end
+        pos_h = ref_h
+        pos_v = ref_v
+        pos_r = ref_r
+    end
+
+end
+
+function drivers.converters.lmtx(driver,box,smode,objnum,specification)
+
+    if not driver then
+        report("error in converter, no driver")
+        return
+    end
+
+    if box then
+        box = tonut(box)
+    else
+        report("error in converter, no box")
+        return
+    end
+
+    local actions     = driver.actions
+    local flushers    = driver.flushers
+
+    initialize        = actions.initialize
+    finalize          = actions.finalize
+
+    updatefontstate   = flushers.updatefontstate
+
+    pushorientation   = flushers.pushorientation
+    poporientation    = flushers.poporientation
+
+    pushleaderlevel   = flushers.pushleaderlevel
+    popleaderlevel    = flushers.popleaderlevel
+
+    flushcharacter    = flushers.character
+    flushfontchar     = flushers.fontchar
+    flushrule         = flushers.rule
+    flushsimplerule   = flushers.simplerule
+    flushspecialrule  = flushers.specialrule
+    flushliteral      = flushers.literal
+    flushwhatsit      = flushers.whatsit
+
+    reset_directions()
+    reset_anchors()
+    reset_state()
+
+    shippingmode = smode
+
+    local details = nil -- must be outside labels
+
+    local width, height, depth = getwhd(box)
+
+    local total = height + depth
+
+    if height > maxdimen or depth > maxdimen or width > maxdimen or total > maxdimen then
+        goto DONE
+    end
+
+    if shippingmode == "page" then
+
+        -- We have zero offsets in ConTeXt.
+
+        local pagewidth, pageheight = getpagedimensions()
+
+        pos_r = lefttoright_code
+
+        if pagewidth > 0 then
+            page_size_h = pagewidth
+        else
+            page_size_h = width
+        end
+
+        if page_size_h == 0 then
+            page_size_h = width
+        end
+
+        if pageheight > 0 then
+            page_size_v = pageheight
+        else
+            page_size_v = total
+        end
+
+        if page_size_v == 0 then
+            page_size_v = total
+        end
+
+        local refpoint_h = 0
+        local refpoint_v = page_size_v
+
+        pos_h = refpoint_h
+        pos_v = refpoint_v - height
+
+    else
+
+        page_size_h = width
+        page_size_v = total
+        pos_r       = getdirection(box)
+        pos_v       = depth
+        pos_h       = pos_r == righttoleft_code and width or 0
+
+    end
+
+    shipbox_ref_h = pos_h
+    shipbox_ref_v = pos_v
+
+    details = {
+        shippingmode  = smode, -- target
+        boundingbox   = { 0, 0, page_size_h, page_size_v },
+        objectnumber  = smode ~= "page" and objnum or nil,
+        pagenumber    = smode == "page" and objnum or nil,
+        specification = specification,
+    }
+
+    initialize(driver,details)
+
+    lastfont = nil -- this forces a sync each page / object
+
+    if getid(box) == vlist_code then
+        vlist_out(box,getlist(box))
+    else
+        hlist_out(box,getlist(box))
+    end
+
+    ::DONE::
+
+    finalize(driver,details)
+
+    shippingmode = "none"
+end
+
+-- This will move to back-out.lua eventually.
+
+do
+
+    ----- sortedhash = table.sortedhash
+
+    ----- tonut      = nodes.tonut
+    local properties = nodes.properties.data
+    local flush      = texio.write
+    local flushline  = texio.writenl
+
+    local periods    = utilities.strings.newrepeater(".")
+
+    local f_detail_0 = formatters["%s %s = %s"]
+    local f_detail_1 = formatters["%i: %s %s = %s"]
+    local f_detail_2 = formatters["%i:%i: %s %s = %s"]
+
+    local function showdetails(n,l,tlp,l1,l2)
+        local p = properties[tonut(n)]
+        if p then
+            for k, v in sortedhash(p) do
+                local t = type(v)
+                local p = periods[l+1]
+                if t == "string" then
+                    if find(v,"[\n\r]") then
+                        v =  "\n" .. stripstring(v) .. "\n"
+                    end
+                elseif t == "number" or t == "boolean" then
+                    v = tostring(v)
+                elseif t == "table" then
+                    v = sequenced(v)
+                else
+                    v = "<" .. tostring(v) .. ">"
+                end
+                if tlp == 3 then
+                    flushline(f_detail_2(l1,l2,p,k,v))
+                elseif tlp == 2 then
+                    flushline(f_detail_1(l2,p,k,v))
+                elseif tlp == 1 then
+                    flushline(f_detail_1(l1,p,k,v))
+                else
+                    flushline(f_detail_0(p,k,v))
+                end
+            end
+        end
+    end
+
+    local whatsittracers = {
+        latelua = showdetails,
+        literal = showdetails,
+    }
+
+    callback.register("show_whatsit",function(n,what,l,tlp,l1,l2)
+        local s = nodes.whatsitcodes[n.subtype]
+        if what == 1 then
+            return s or "unknown"
+     -- elseif what == 2 then
+        else
+            local w = whatsittracers[s]
+            if w then
+                w(n,l,tlp,l1,l2)
+            end
+        end
+    end)
+
+    local names = attributes.names
+
+    callback.register("get_attribute",function(k,v)
+        return attributes.names[k], nil -- we show the name and number
+    end)
+
+end

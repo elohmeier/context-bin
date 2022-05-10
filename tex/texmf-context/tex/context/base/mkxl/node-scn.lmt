@@ -1,0 +1,373 @@
+if not modules then modules = { } end modules ['node-scn'] = {
+    version   = 1.001,
+    comment   = "companion to node-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local floor = math.floor
+
+local attributes         = attributes
+local nodes              = nodes
+
+local nuts               = nodes.nuts
+
+local getnext            = nuts.getnext
+local getprev            = nuts.getprev
+local getid              = nuts.getid
+local getattr            = nuts.getattr
+local getsubtype         = nuts.getsubtype
+local getlist            = nuts.getlist
+local setlist            = nuts.setlist
+
+local nodecodes          = nodes.nodecodes
+local gluecodes          = nodes.gluecodes
+local kerncodes          = nodes.kerncodes
+
+local glyph_code         = nodecodes.glyph
+local disc_code          = nodecodes.disc
+local rule_code          = nodecodes.rule
+local boundary_code      = nodecodes.boundary
+local dir_code           = nodecodes.dir
+local math_code          = nodecodes.math
+local glue_code          = nodecodes.glue
+local penalty_code       = nodecodes.penalty
+local kern_code          = nodecodes.kern
+local hlist_code         = nodecodes.hlist
+local vlist_code         = nodecodes.vlist
+
+local userskip_code      = gluecodes.userskip
+local spaceskip_code     = gluecodes.spaceskip
+local xspaceskip_code    = gluecodes.xspaceskip
+local leaders_code       = gluecodes.leaders
+local rightfillskip_code = gluecodes.rightparfillskip
+local righthangskip_code = gluecodes.righthangskip
+
+local fontkern_code      = kerncodes.fontkern
+
+local variables          = interfaces.variables
+
+local privateattributes  = attributes.private
+
+local a_runningtext      = privateattributes('runningtext')
+
+local v_yes              = variables.yes
+local v_all              = variables.all
+
+local function striprange(first,last) -- todo: dir
+    if first and last then -- just to be sure
+        if first == last then
+            return first, last
+        end
+        while first and first ~= last do
+            local id = getid(first)
+            if id == glyph_code or id == disc_code or id == dir_code or id == boundary_code then -- or id == rule_code
+                break
+            else
+                first = getnext(first)
+            end
+        end
+        if not first then
+            return nil, nil
+        elseif first == last then
+            return first, last
+        end
+        while last and last ~= first do
+            local id = getid(last)
+            if id == glyph_code or id == disc_code or id == dir_code or id == boundary_code  then -- or id == rule_code
+                break
+            else
+                local prev = getprev(last) -- luatex < 0.70 has italic correction kern not prev'd
+                if prev then
+                    last = prev
+                else
+                    break
+                end
+            end
+        end
+        if not last then
+            return nil, nil
+        end
+    end
+    return first, last
+end
+
+nuts.striprange = striprange
+
+-- todo: order and maybe other dimensions
+
+-- we can use this one elsewhere too
+--
+-- todo: functions: word, sentence
+--
+-- glyph rule unset whatsit glue margin_kern kern math disc
+
+-- we assume {glyphruns} and no funny extra kerning, ok, maybe we need
+-- a dummy character as start and end; anyway we only collect glyphs
+--
+-- this one needs to take layers into account (i.e. we need a list of
+-- critical attributes)
+
+-- omkeren class en level -> scheelt functie call in analyze
+
+-- todo: switching inside math
+
+-- handlers (some are very specialized and demanding)
+
+local maxlevel = 1
+
+local function processwords(nesting,attribute,data,flush,head,parent,skip) -- we have hlistdir and local dir
+    local n = head
+    if n then
+        local f, l, a, d, class
+        local continue, leaders, strip, level = false, false, true, -1
+        while n do
+            local id = getid(n)
+            if id == glyph_code
+                or id == rule_code
+                or (id == hlist_code and getattr(n,a_runningtext))
+                or id == disc_code
+                or id == boundary_code
+            then
+                local aa = getattr(n,attribute)
+                -- new approach
+                local dd, ll
+                if aa then
+                    dd = data[aa]
+                    ll = dd.level or 1
+                    if nesting == 1 and ll > maxlevel then
+                        maxlevel = ll
+                    end
+                    if ll == nesting then
+                        -- we're okay
+                    else
+                        while true do
+                            local nestingvalue = dd.nestingvalue
+                            if nestingvalue then
+                                dd = dd.nestingdata
+                                ll = dd.level
+                                if ll == nesting then
+                                    aa = nestingvalue
+                                    break
+                                end
+                            else
+                                -- no matching level found
+                                aa = nil
+                                dd = nil
+                                break
+                            end
+                        end
+                    end
+                end
+                -- old approach
+                if aa and aa ~= skip then
+                    if aa == a then
+                        if not f then -- ?
+                            f = n
+                        end
+                        l = n
+                    else
+                        if f then
+                            if class == aa then -- and newlevel > level then
+                                head = flush(head,f,l,d,level,parent,false)
+                            else
+                                head = flush(head,f,l,d,level,parent,strip)
+                            end
+                        end
+                        f, l, a = n, n, aa
+                        d     = dd
+                        class = aa
+                        if d then
+                            continue = d.continue
+                            level    = d.level or 1
+                            leaders  = continue == v_all
+                            continue = leaders or continue == v_yes
+                        else
+                            continue = true
+                            level    = 1
+                            leaders  = false
+                        end
+                    end
+                else
+                    if f then
+                        head = flush(head,f,l,d,level,parent,strip)
+                    end
+                    f, l, a = nil, nil, nil
+                end
+                if id == hlist_code then
+                    local list = getlist(n)
+                    if list then
+                        setlist(n,processwords(nesting,attribute,data,flush,list,n,aa))
+                    end
+                end
+                goto next
+         -- elseif id == disc_code or id == boundary_code then
+         --     if f then
+         --         l = n
+         --     end
+         --     goto next
+            elseif id == kern_code then
+                if getsubtype(n) == fontkern_code then
+                    if f then
+                        l = n
+                    end
+                    goto next
+                else
+                    goto rest
+                end
+            elseif id == math_code then
+                -- otherwise not consistent: a $b$ c vs a $b+c$ d etc
+                -- we need a special (optional) go over math variant
+                if f then
+                    head = flush(head,f,l,d,level,parent,strip)
+                    f, l, a = nil, nil, nil
+                end
+                goto next
+            elseif id == hlist_code or id == vlist_code then
+                if f then
+                    head = flush(head,f,l,d,level,parent,strip)
+                    f, l, a = nil, nil, nil
+                end
+                local list = getlist(n)
+                if list then
+                    setlist(n,processwords(nesting,attribute,data,flush,list,n,skip))
+                end
+                goto next
+            elseif id == dir_code then -- only changes in dir, we assume proper boundaries
+                if f then
+                    l = n
+                end
+                goto next
+            end
+          ::rest::
+            if f then
+                if continue then
+                    if id == penalty_code then
+                        l = n
+                        goto next
+                 -- elseif id == kern_code then
+                 --     l = n
+                 -- goto next
+                    elseif id == glue_code then
+                        -- catch \underbar{a} \underbar{a} (subtype test is needed)
+                        local subtype = getsubtype(n)
+                        if getattr(n,attribute) and (subtype == userskip_code or subtype == spaceskip_code or subtype == xspaceskip_code or (leaders and subtype >= leaders_code)) then
+                            l = n
+                        else
+                            head = flush(head,f,l,d,level,parent,strip)
+                            f, l, a = nil, nil, nil
+                        end
+                    end
+                else
+                    head = flush(head,f,l,d,level,parent,strip)
+                    f, l, a = nil, nil, nil
+                end
+            end
+          ::next::
+            n = getnext(n)
+        end
+        if f then
+            head = flush(head,f,l,d,level,parent,strip)
+        end
+    end
+    return head
+end
+
+nuts.processwords = function(attribute,data,flush,head,parent) -- we have hlistdir and local dir
+ -- print("processing words at level "..1)io.flush()
+    maxlevel = 1
+    head = processwords(1,attribute,data,flush,head,parent)
+    for i=2,maxlevel do
+     -- print("processing words at level "..i)io.flush()
+        head = processwords(i,attribute,data,flush,head,parent)
+    end
+    return head
+end
+
+-- works on lines !
+-- todo: stack because skip can change when nested
+
+local function processranges(attribute,flush,head,parent,depth,skip)
+    local n = head
+    if n then
+        local f, l, a
+        while n do
+            local id = getid(n)
+            if id == glyph_code or id == rule_code then
+                local aa = getattr(n,attribute)
+             -- if aa and (not skip or aa ~= skip) then
+                if aa then
+                    if aa == a then
+                        if not f then
+                            f = n
+                        end
+                        l = n
+                    else
+                        if f then
+                            head = flush(head,f,l,a,parent,depth)
+                        end
+                        f, l, a = n, n, aa
+                    end
+                else
+                    if f then
+                        head = flush(head,f,l,a,parent,depth)
+                    end
+                    f, l, a = nil, nil, nil
+                end
+            elseif id == disc_code or id == boundary_code then
+                if f then
+                    l = n
+                else
+                    -- weird
+                end
+            elseif id == kern_code then
+                if getsubtype(n) == fontkern_code then
+                    if f then
+                        l = n
+                    end
+                end
+         -- elseif id == penalty_code then
+            elseif id == glue_code then
+                -- todo: leaders
+--                 if getsubtype(n) == rightfillskip_code or getsubtype(n) == righthangskip_code then
+--                     break
+--                 end
+            elseif id == hlist_code or id == vlist_code then
+                local aa = getattr(n,attribute)
+             -- if aa and (not skip or aa ~= skip) then
+                if aa then
+                    if aa == a then
+                        if not f then
+                            f = n
+                        end
+                        l = n
+                    else
+                        if f then
+                            head = flush(head,f,l,a,parent,depth), true
+                        end
+                        f, l, a = n, n, aa
+                    end
+                else
+                    if f then
+                        head = flush(head,f,l,a,parent,depth), true
+                    end
+                    f, l, a = nil, nil, nil
+                end
+                local list = getlist(n)
+                if list then
+                    setlist(n,processranges(attribute,flush,list,n,depth+1,aa))
+                end
+            end
+            n = getnext(n)
+        end
+        if f then
+            head = flush(head,f,l,a,parent,depth)
+        end
+    end
+    return head
+end
+
+nuts.processranges = function(attribute,flush,head,parent) -- we have hlistdir and local dir
+    return processranges(attribute,flush,head,parent,0)
+end

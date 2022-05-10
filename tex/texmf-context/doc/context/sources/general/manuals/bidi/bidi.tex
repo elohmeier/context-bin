@@ -1,0 +1,30 @@
+% language=us runpath=texruns:manuals/bidi
+
+% Because we cross a threshold in the amount of content the sources have been split
+% into components. This is typical a manual that grows. Feel free to send suggestions
+% and improvements. Future versions might include Idris' long due bidi onthology.
+
+\environment bidi-style
+
+\startdocument
+
+    \component bidi-titlepage
+
+    \startfrontmatter
+        \component bidi-contents
+        \component bidi-introduction
+    \stopfrontmatter
+
+    \startbodymatter
+        \component bidi-fonts
+        \component bidi-mixed
+        \component bidi-numbering
+
+        % work in progress / dev:
+        \component bidi-tables
+
+        \component bidi-lua
+        \component bidi-vertical
+    \stopbodymatter
+
+\stopdocument

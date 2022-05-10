@@ -1,0 +1,97 @@
+if not modules then modules = { } end modules ['node-dir'] = {
+    version   = 1.001,
+    comment   = "companion to node-ini.mkiv",
+    author    = "Hans Hagen",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local nodes             = nodes
+local nuts              = nodes.nuts
+
+local nodecodes         = nodes.nodecodes
+local hlist_code        = nodecodes.hlist
+local vlist_code        = nodecodes.vlist
+local normaldir_code    = nodes.dircodes.normal
+local line_code         = nodes.listcodes.line
+local lefttoright_code  = nodes.dirvalues.lefttoright
+
+local getnext           = nuts.getnext
+local getlist           = nuts.getlist
+local getwhd            = nuts.getwhd
+local getwidth          = nuts.getwidth
+local getdirection      = nuts.getdirection
+
+local setlist           = nuts.setlist
+
+local nextdir           = nuts.traversers.dir
+local nextlist          = nuts.traversers.list
+
+local rangedimensions   = nuts.rangedimensions
+local insertbefore      = nuts.insertbefore
+local insertafter       = nuts.insertafter
+
+local new_rule          = nuts.pool.rule
+local new_kern          = nuts.pool.kern
+
+local setcolor          = nodes.tracers.colors.set
+local settransparency   = nodes.tracers.transparencies.set
+
+local function dirdimensions(parent,begindir) -- can be a helper
+    local level = 1
+    for current, subtype in nextdir, getnext(begindir) do
+        if subtype == normaldir_code then -- todo
+            level = level + 1
+        else
+            level = level - 1
+        end
+        if level == 0 then -- does the type matter
+            return (rangedimensions(parent,begindir,current)), current
+        end
+    end
+    return (rangedimensions(parent,begindir)), begindir
+--  return getwidth(parent), begindir
+end
+
+nuts.dirdimensions = dirdimensions
+
+local function colorit(list,current,dir,w,h,d)
+    local rule  = new_rule(w,h,d)
+    local kern  = new_kern(-w)
+    local color = dir == lefttoright_code and "trace:s" or "trace:o"
+    setcolor(rule,color)
+    settransparency(rule,color)
+    list, current = insertbefore(list,current,kern)
+    list, current = insertbefore(list,current,rule)
+    return list, current
+end
+
+
+local function tracedirections(head)
+    for parent, id, subtype, list in nextlist, head do
+        if list then
+            if subtype == line_code then
+                local w, h, d = getwhd(parent)
+                list = colorit(list,list,getdirection(parent),w,h,d)
+                for current in nextdir, list do
+                    local dir, cancel = getdirection(current)
+                    if not cancel then
+                        local width = dirdimensions(parent,current)
+                        list = colorit(list,current,dir,width,h,d)
+                    end
+                end
+            end
+            tracedirections(list)
+        end
+    end
+    return head
+end
+
+nodes.tracers.directions = tracedirections
+
+-- so, not attribute driven, only shipout, so more a document wide tracer, maybe
+-- per page (so keep enabled and delayed disabled
+
+trackers.register("nodes.directions", function(v)
+    nodes.tasks.setaction("shipouts","nodes.tracers.directions",v)
+end)

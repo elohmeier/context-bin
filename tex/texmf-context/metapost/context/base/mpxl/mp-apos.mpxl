@@ -1,0 +1,274 @@
+%D \module
+%D   [       file=mp-apos.mpiv,
+%D        version=2012.02.19, % was mp-core: 1999.08.01, anchoring
+%D          title=\CONTEXT\ \METAPOST\ graphics,
+%D       subtitle=anchored background macros,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+%D Massimiliano Farinella added jiggles (zigzags) to the sidebars.
+
+if known metafun_loaded_apos : endinput ; fi ;
+
+newinternal boolean metafun_loaded_apos ; metafun_loaded_apos := true ; immutable metafun_loaded_apos ;
+
+path    posboxes[],
+        posregions[] ;
+
+numeric pospages[],
+        nofposboxes ;
+
+nofposboxes := 0 ;
+
+def boxlineoptions = withcolor .8blue  enddef ;
+def boxfilloptions = withcolor .8white enddef ;
+
+mutable posboxes, posregions, pospages, nofposboxes ;
+
+def connect_positions =
+    if nofposboxes = 2 :
+        pickup pencircle scaled boxlinewidth ;
+        path pa ; pa := posboxes[1] enlarged boxlineoffset ;
+        path pb ; pb := posboxes[2] enlarged boxlineoffset ;
+        if pospages[1] = pospages[2] :
+            draw posboxes[1]  boxlineoptions ;
+            path pc ; pc := center pa {up} .. {down} center pb ;
+            pair cc ; cc := (pc intersection_point pa) ;
+            if intersection_found :
+                pc := pc cutbefore cc ;
+                cc := (pc intersection_point pb) ;
+                if intersection_found :
+                    pc := pc cutafter cc ;
+                    drawarrow pc boxlineoptions ;
+                    drawarrow reverse pc boxlineoptions ;
+                fi ;
+            fi ;
+        elseif pospages[1] == RealPageNumber :
+            draw posboxes[1] boxlineoptions ;
+            path pc ; pc := center pa {up} ... {right} urcorner (posregions[1] enlarged (20pt,20pt)) ;
+            pair cc ; cc := (pc intersection_point pa) ;
+            if intersection_found :
+                pc := pc cutbefore cc ;
+                drawarrow pc boxlineoptions ;
+            fi ;
+        elseif pospages[2] == RealPageNumber :
+            draw posboxes[2] boxlineoptions ;
+            path pc ; pc := ulcorner (posregions[2] enlarged (20pt,20pt)) {right} ... {down} center pb ;
+            pair cc ; cc := (pc intersection_point pb) ;
+            if intersection_found :
+                pc := pc cutafter cc ;
+                drawarrow pc boxlineoptions ;
+            fi ;
+        fi ;
+    fi ;
+enddef ;
+
+% anch-bar:
+
+% When Massimiliano Farinella (aka mf) added the patterns with jiggles the interface got
+% upgraded to lmtx too. So this one is different from the mkiv version! Messed up a little
+% by me to fit in the rest.
+
+vardef anch_sidebars_pattern(expr a, b, pattern, patternlength, patternheight, linewidth) =
+    image (
+        save p, q, s ; pair p, s ; path q ;
+        s := ( (b - a) / arclength (a -- b) ) * patternlength ;
+        q := pattern xscaled patternlength yscaled patternheight rotated (angle(s)) ;
+        p := a ;
+        forever :
+            draw
+                q shifted p
+                withpen pencircle scaled linewidth ;
+            p := p + s ;
+            exitif arclength (a -- p) > arclength (a -- b) ;
+        endfor ;
+        clip currentpicture to
+            (xpart llcorner currentpicture, ypart b) --
+            (xpart lrcorner currentpicture, ypart b) --
+            (xpart urcorner currentpicture, ypart a) --
+            (xpart ulcorner currentpicture, ypart a) -- cycle ;
+    )
+enddef ;
+
+% (performance wise) we can fetch distance and alternative once
+
+def anch_sidebars_draw(expr b_self, e_self, t_anchor) = % even these three can become variables
+    % beware, we anchor at (x,y)
+    begingroup ;
+        interim linecap := if boxalternative = 1 : rounded else : butt fi ;
+        save a, b, lw, by ; pair a, b ; numeric lw, by ;
+        by := getposy(getposregion(b_self)) - getposy(t_anchor) ; % for mf to do: all of them
+        if getpospage(b_self) = getpospage(e_self) :
+            a := (-boxdistance,getposy(b_self) + getposheight(b_self) - getposy(t_anchor)) ;
+            b := (-boxdistance,getposy(e_self) - getposdepth (e_self) - getposy(t_anchor)) ;
+        elseif RealPageNumber = getpospage(b_self) :
+            a := (-boxdistance,getposy(b_self) + getposheight(b_self) - getposy(t_anchor)) ;
+            b := (-boxdistance,by) ;
+        elseif RealPageNumber = getpospage(e_self) :
+            a := (-boxdistance,getposheight(t_anchor)) ;
+            b := (-boxdistance,getposy(e_self) - getposdepth (e_self) - getposy(t_anchor)) ;
+        else :
+            a := (-boxdistance,getposheight(t_anchor)) ;
+            b := (-boxdistance,0) ;
+        fi ;
+        if a == b :
+            message("side bar pattern ignored: a == b") ;
+        else :
+            a := (xpart a, min(ypart a + boxtopoffset,getposheight(t_anchor))) ;
+            b := (xpart b, max(ypart b - boxbottomoffset,0)) ;
+            if boxatright :
+                a := (xpart a + HSize + 2 * boxdistance,ypart a) ;
+                b := (xpart b + HSize + 2 * boxdistance,ypart b) ;
+            fi ;
+            lw := boxlinewidth ;
+            draw
+                if boxalternative = 2 :
+                    anch_sidebars_pattern(a, b,
+                        ((0,0)--(0.25,-0.5)--(0.75,0.5)--(1,0)) scaled lw,
+                        2lw, 2lw, lw
+                    )
+                elseif boxalternative = 3 :
+                    anch_sidebars_pattern(a, b,
+                        ((0,0)--(0.25,-0.5)--(0.75,0.5)--(1,0)) scaled lw,
+                        4lw, 1.5lw, lw
+                    )
+                elseif boxalternative = 4 :
+                    anch_sidebars_pattern(a, b,
+                        (((0,0) .. controls (0,0.5) and (0.5,0.5) .. (0.5,0)) -- ((0.5,0) .. controls (0.5,-0.5) and (1,-0.5) .. (1,0))) scaled lw,
+                        6lw, 4lw, lw
+                    )
+                elseif boxalternative = 5 :
+                    anch_sidebars_pattern(a, b,
+                        ((0,0) .. controls (0,1) and (1,1) .. (1,0)) scaled lw,
+                        4lw, 2lw, lw
+                    )
+                elseif boxalternative = 6 :
+                    anch_sidebars_pattern(a, b,
+                        ((0,0.5) .. (1,-0.5)) scaled lw,
+                        4lw, 2lw, lw
+                    )
+                elseif boxalternative = 7 :
+                    anch_sidebars_pattern(a, b,
+                        ((0,-0.5) .. (1,0.5)) scaled lw,
+                        22lw, 5lw, lw
+                    )
+                else :
+                    (a -- b)
+                        if boxalternative = 1 :
+                            dashed (withdots scaled (lw/2))
+                        fi
+                        withpen pencircle scaled lw
+                fi
+                withcolor boxlinecolor ;
+        fi ;
+    endgroup ;
+enddef ;
+
+% new interface
+
+newscriptindex mfid_getposboxes  ; mfid_getposboxes  := scriptindex "getposboxes" ;
+newscriptindex mfid_getmultipars ; mfid_getmultipars := scriptindex "getmultipars" ;
+
+def getposboxes (expr tags, anchor) = runscript mfid_getposboxes  tags anchor ; enddef ;
+def getmultipars(expr tags, anchor) = runscript mfid_getmultipars tags anchor ; enddef ;
+
+newscriptindex mfid_getpospage      ; mfid_getpospage      := scriptindex "getpospage"      ; vardef getpospage     (expr n) = runscript mfid_getpospage      n enddef ;
+newscriptindex mfid_getposparagraph ; mfid_getposparagraph := scriptindex "getposparagraph" ; vardef getposparagraph(expr n) = runscript mfid_getposparagraph n enddef ;
+newscriptindex mfid_getposcolumn    ; mfid_getposcolumn    := scriptindex "getposcolumn"    ; vardef getposcolumn   (expr n) = runscript mfid_getposcolumn    n enddef ;
+newscriptindex mfid_getposregion    ; mfid_getposregion    := scriptindex "getposregion"    ; vardef getposregion   (expr n) = runscript mfid_getposregion    n enddef ;
+
+newscriptindex mfid_getposx ; mfid_getposx := scriptindex "getposx" ; vardef getposx(expr n) = runscript mfid_getposx n enddef ;
+newscriptindex mfid_getposy ; mfid_getposy := scriptindex "getposy" ; vardef getposy(expr n) = runscript mfid_getposy n enddef ;
+
+newscriptindex mfid_getposwidth  ; mfid_getposwidth  := scriptindex "getposwidth"  ; vardef getposwidth (expr n) = runscript mfid_getposwidth  n enddef ;
+newscriptindex mfid_getposheight ; mfid_getposheight := scriptindex "getposheight" ; vardef getposheight(expr n) = runscript mfid_getposheight n enddef ;
+newscriptindex mfid_getposdepth  ; mfid_getposdepth  := scriptindex "getposdepth"  ; vardef getposdepth (expr n) = runscript mfid_getposdepth  n enddef ;
+
+newscriptindex mfid_getposleftskip   ; mfid_getposleftskip   := scriptindex "getposleftskip"   ; vardef getposleftskip  (expr n) = runscript mfid_getposleftskip   n enddef ;
+newscriptindex mfid_getposrightskip  ; mfid_getposrightskip  := scriptindex "getposrightskip"  ; vardef getposrightskip (expr n) = runscript mfid_getposrightskip  n enddef ;
+newscriptindex mfid_getposhsize      ; mfid_getposhsize      := scriptindex "getposhsize"      ; vardef getposhsize     (expr n) = runscript mfid_getposhsize      n enddef ;
+newscriptindex mfid_getposparindent  ; mfid_getposparindent  := scriptindex "getposparindent"  ; vardef getposparindent (expr n) = runscript mfid_getposparindent  n enddef ;
+newscriptindex mfid_getposhangindent ; mfid_getposhangindent := scriptindex "getposhangindent" ; vardef getposhangindent(expr n) = runscript mfid_getposhangindent n enddef ;
+newscriptindex mfid_getposhangafter  ; mfid_getposhangafter  := scriptindex "getposhangafter"  ; vardef getposhangafter (expr n) = runscript mfid_getposhangafter  n enddef ;
+
+newscriptindex mfid_getposxy         ; mfid_getposxy         := scriptindex "getposxy"         ; vardef getposxy        (expr n) = runscript mfid_getposxy         n enddef ;
+newscriptindex mfid_getposupperleft  ; mfid_getposupperleft  := scriptindex "getposupperleft"  ; vardef getposupperleft (expr n) = runscript mfid_getposupperleft  n enddef ;
+newscriptindex mfid_getposlowerleft  ; mfid_getposlowerleft  := scriptindex "getposlowerleft"  ; vardef getposlowerleft (expr n) = runscript mfid_getposlowerleft  n enddef ;
+newscriptindex mfid_getposupperright ; mfid_getposupperright := scriptindex "getposupperright" ; vardef getposupperright(expr n) = runscript mfid_getposupperright n enddef ;
+newscriptindex mfid_getposlowerright ; mfid_getposlowerright := scriptindex "getposlowerright" ; vardef getposlowerright(expr n) = runscript mfid_getposlowerright n enddef ;
+
+newscriptindex mfid_getposllx ; mfid_getposllx := scriptindex "getposllx" ; vardef getposllx(expr n) = runscript mfid_getposllx n enddef ;
+newscriptindex mfid_getposlly ; mfid_getposlly := scriptindex "getposlly" ; vardef getposlly(expr n) = runscript mfid_getposlly n enddef ;
+newscriptindex mfid_getposurx ; mfid_getposurx := scriptindex "getposurx" ; vardef getposurx(expr n) = runscript mfid_getposurx n enddef ;
+newscriptindex mfid_getposury ; mfid_getposury := scriptindex "getposury" ; vardef getposury(expr n) = runscript mfid_getposury n enddef ;
+
+permanent
+    getposboxes, getmultipars,
+    getpospage, getposparagraph, getposcolumn, getposregion,
+    getposx, getposy, getposwidth, getposheight, getposdepth,
+    getposleftskip, getposrightskip, getposhsize, getposparindent, getposhangindent, getposhangafter,
+    getposxy, getposupperleft, getposlowerleft, getposupperright, getposlowerright,
+    getposllx, getposlly, getposurx, getposury ;
+
+def anch_box_arrows_draw =
+    begingroup ;
+        save f, t, p, alternative, delta, dashtype, edge ; pair f, t ; path p ; string alternative ;
+        dashtype := mpvarn("dashtype") ;
+        delta := mpvard("distance");
+        alternative := mpvars("alternative") ;
+        if positionx(mpvars("rightedge")) > 0 :
+            if alternative = "left" :
+                edge := positionx(mpvars("leftedge"));
+                f := (edge,positiony(mpvars("from"))) ;
+                t := (edge,positiony(mpvars("to"  ))) ;
+                p := (f  -- (f xshifted - delta) -- (t xshifted - delta) --  t) ;
+                draw thetextext.lft(mpvars("text"), (point .5 along p) xshifted -ExHeight) ;
+            elseif alternative = "right" :
+                edge := positionx(mpvars("rightedge"));
+                f := (edge,positiony(mpvars("from"))) ;
+                t := (edge,positiony(mpvars("to"  ))) ;
+                p := (f  -- (f xshifted delta) -- (t xshifted delta) --  t) ;
+                draw thetextext.rt(mpvars("text"), (point .5 along p) xshifted ExHeight) ;
+            elseif alternative = "middle" :
+                p := f  --  t ;
+                draw thetextext.rt(mpvars("text"), (point .5 along p) xshifted ExHeight) ;
+            fi ;
+        else :
+            f := positionxy(mpvars("from")) ;
+            t := positionxy(mpvars("to")) ;
+            if alternative = "bottom" :
+                f := f yshifted (- abs(ypart f - ypart t)) ;
+                p := (f  -- (f yshifted -delta) -- (t yshifted -delta) --  t) ;
+                draw thetextext.bot(mpvars("text"), (point .5 along p) yshifted -.25ExHeight) ;
+            elseif alternative = "top" :
+                f := f yshifted (abs(ypart f - ypart t)) ;
+                p := (f  -- (f yshifted delta) -- (t yshifted delta) --  t) ;
+                draw thetextext.top(mpvars("text"), (point .5 along p) yshifted .25ExHeight) ;
+            elseif alternative = "left" :
+                f := f xshifted (- abs(xpart f - xpart t)) ;
+                p := (f  -- (f xshifted - delta) -- (t xshifted - delta) --  t) ;
+                draw thetextext.lft(mpvars("text"), (point .5 along p) xshifted -ExHeight) ;
+            elseif alternative = "right" :
+                f := f xshifted (abs(xpart f - xpart t)) ;
+                p := (f  -- (f xshifted delta) -- (t xshifted delta) --  t) ;
+                draw thetextext.rt(mpvars("text"), (point .5 along p) xshifted ExHeight) ;
+            elseif alternative = "middle" :
+                p := f  --  t ;
+                draw thetextext.rt(mpvars("text"), (point .5 along p) xshifted ExHeight) ;
+            fi ;
+        fi ;
+        % 1 = dashed, 2 = dashed with background
+        drawarrow p
+            if dashtype == 1 :
+                withdashes .5ExHeight
+            fi
+            withpen pencircle scaled mpvard("rulethickness")
+            withcolor mpvars("linecolor") ;
+        positioninregion ;
+    endgroup ;
+enddef ;

@@ -1,0 +1,171 @@
+if not modules then modules = { } end modules ['strc-mar'] = {
+    version   = 1.001,
+    comment   = "companion to strc-mar.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local lpegmatch = lpeg.match
+local setmetatableindex = table.setmetatableindex
+
+local context        = context
+
+local implement      = interfaces.implement
+local variables      = interfaces.variables
+
+local v_first        = variables.first
+local v_last         = variables.last
+local v_previous     = variables.previous
+local v_next         = variables.next
+local v_column       = variables.column
+
+local nuts           = nodes.nuts
+local nextmark       = nuts.traversers.mark
+local getbox         = nuts.getbox
+local getid          = nuts.getid
+local getlist        = nuts.getlist
+local getindex       = nuts.getindex
+local getdata        = nuts.getdata
+----- setmark_code   = nodes.markcodes.set
+local flushmark_code = nodes.markcodes.flush
+local hlist_code     = nodes.nodecodes.hlist
+local vlist_code     = nodes.nodecodes.vlist
+
+local marks      = { }
+structures.marks = marks
+
+local markdata = setmetatableindex("table")
+local pattern  = lpeg.splitat(":")
+
+implement {
+    name      = "synchronizemarking",
+    arguments =  { "string", "integer", "integer" },
+    actions   = function(category,index,boxnumber)
+        local new = setmetatableindex("table")
+        local box = getbox(boxnumber)
+        while box and getid(box) == hlist_code do
+            box = getlist(box)
+        end
+        if box and getid(box) == vlist_code then
+            local list = getlist(box)
+            if list then
+                for n, subtype in nextmark, list do
+                    local class = getindex(n)
+                    local entry = new[class]
+                    if subtype == flushmark_code then
+                        entry.first = false
+                        entry.last  = false
+                    else
+                        if not entry.first then
+                            entry.first = n
+                        end
+                        entry.last = n
+                    end
+                end
+                for class, entry in next, new do
+                    local first = entry.first
+                    local last  = entry.last
+                    if last and first ~= last then
+                        entry.last = getdata(last,true)
+                    end
+                    if first then
+                        entry.first = getdata(first,true)
+                    end
+                end
+            else
+                -- wipe empty columns
+            end
+        else
+            -- wipe empty columns
+        end
+        local m = markdata[category]
+        if m then
+            local entry = m[index]
+            if entry then
+                local prev = index == 1 and m[#m] or m[index-1]
+                for class, data in next, entry do
+                    local pcls = prev[class]
+                    local last = pcls and pcls.last
+                    if last then
+                        local ncls = new[class]
+                        ncls.previous = last
+                        if not ncls.first then
+                            ncls.first = last
+                        end
+                        if not ncls.last then
+                            ncls.last = ncls.first
+                        end
+                    end
+                end
+            end
+            m[index] = new
+        else
+            new.previous = ""
+            markdata[category] = { [index] = new }
+        end
+     -- inspect(data)
+    end,
+}
+
+implement {
+    name      = "getsynchronizedmarking",
+    arguments = { "integer", "string", "string" },
+    actions   = function(class,category,what)
+        local category, n = lpegmatch(pattern,category)
+        local useddata = markdata[category]
+        if useddata then
+            local index = tonumber(n) or 1
+            local data  = useddata[index]
+            if data then
+                local entry = data[class]
+                if entry then
+                    if what == v_first then
+                        context(entry.first or "")
+                    elseif what == v_last then
+                        context(entry.last or "")
+                    elseif what == v_previous then
+                        context(entry.previous or "")
+                    elseif what == v_next then
+                     -- context(entry.next or "") -- will be done when i need it, unreliable anyway
+                    end
+                end
+            end
+        end
+    end
+}
+
+implement {
+    name      = "resetsynchronizedmarking",
+    arguments = "argument",
+    actions   = function(category)
+        local category, n = lpegmatch(pattern,category)
+        markdata[category] = nil
+    end
+}
+
+local pattern = lpeg.afterprefix("li::")
+
+function marks.title(tag,n)
+    local listindex = lpegmatch(pattern,n)
+    if listindex then
+        commands.savedlisttitle(tag,listindex,"marking")
+    else
+        context(n)
+    end
+end
+
+function marks.number(tag,n) -- no spec
+    local listindex = lpegmatch(pattern,n)
+    if listindex then
+        commands.savedlistnumber(tag,listindex)
+    else
+        -- no prefix (as it is the prefix)
+        context(n)
+    end
+end
+
+-- interface
+
+implement { name = "markingtitle",  actions = marks.title, arguments = "2 strings" }
+implement { name = "markingnumber", actions = marks.number,arguments = "2 strings" }

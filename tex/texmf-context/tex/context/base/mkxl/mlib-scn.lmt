@@ -1,0 +1,1123 @@
+if not modules then modules = { } end modules ['mlib-scn'] = {
+    version   = 1.001,
+    comment   = "companion to mlib-ctx.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files",
+}
+
+-- Very experimental, for Alan and me.
+
+-- for i = 1 upto 32000 : % 0.062
+--     ts := 5mm / 20;
+-- endfor ;
+--
+-- for i = 1 upto 32000 : % 0.219
+--     ts := (getparameter "axis" "sy") / 20;
+-- endfor ;
+--
+-- for i = 1 upto 32000 : % 0.266
+--     ts := (getparameterx "axis" "sy") / 20;
+-- endfor ;
+--
+-- pushparameters "axis";
+-- for i = 1 upto 32000 : % 0.250
+--     ts := (getparameterx "sy") / 20;
+-- endfor ;
+-- popparameters;
+
+local type, next, rawget, getmetatable, tonumber = type, next, rawget, getmetatable, tonumber
+local byte, gmatch = string.byte, string.gmatch
+local insert, remove = table.insert, table.remove
+
+local mplib    = mplib
+local metapost = metapost
+
+local codes = metapost.codes
+local types = metapost.types
+
+local setmetatableindex   = table.setmetatableindex
+
+local scanners            = mp.scan
+local injectors           = mp.inject
+
+local scannext            = scanners.next
+local scanexpression      = scanners.expression
+local scantoken           = scanners.token
+local scansymbol          = scanners.symbol
+local scanproperty        = scanners.property
+local scannumeric         = scanners.numeric
+local scannumber          = scanners.number
+local scaninteger         = scanners.integer
+local scanboolean         = scanners.boolean
+local scanstring          = scanners.string
+local scanpair            = scanners.pair
+local scancolor           = scanners.color
+local scancmykcolor       = scanners.cmykcolor
+local scantransform       = scanners.transform
+local scanpath            = scanners.path
+local scanpen             = scanners.pen
+
+local mpprint             = mp.print
+local injectnumeric       = injectors.numeric
+local injectstring        = injectors.string
+local injectboolean       = injectors.boolean
+local injectpair          = injectors.pair
+local injecttriplet       = injectors.color
+local injectquadruple     = injectors.cmykcolor
+local injecttransform     = injectors.transform
+local injectpath          = injectors.path
+
+local report              = logs.reporter("metapost")
+
+local semicolon_code      = codes.semicolon
+local equals_code         = codes.equals
+local comma_code          = codes.comma
+local colon_code          = codes.colon
+local leftbrace_code      = codes.leftbrace
+local rightbrace_code     = codes.rightbrace
+local leftbracket_code    = codes.leftbracket
+local rightbracket_code   = codes.rightbracket
+local leftdelimiter_code  = codes.leftdelimiter
+local rightdelimiter_code = codes.rightdelimiter
+local numeric_code        = codes.numeric
+local string_code         = codes.string
+local capsule_code        = codes.capsule
+local nullary_code        = codes.nullary
+local tag_code            = codes.tag
+local definedmacro_code   = codes.definedmacro
+
+local typescanners   = nil
+local tokenscanners  = nil
+local scanset        = nil
+local scanparameters = nil
+
+scanset = function() -- can be optimized, we now read twice
+    scantoken()
+    if scantoken(true) == rightbrace_code then
+        scantoken()
+        return { }
+    else
+        local l = { }
+        local i = 0
+        while true do
+            i = i + 1
+            local s = scansymbol(true)
+            if s == "{" then
+                l[i] = scanset()
+            elseif s == "[" then
+                local d = { }
+                scansymbol()
+                while true do
+                    local s = scansymbol()
+                    if s == "]" then
+                        break;
+                    elseif s == "," then
+                        -- continue
+                    else
+                        local t = scantoken(true)
+                        if t == equals_code or t == colon_code then
+                            scantoken()
+                        end
+                        d[s] = tokenscanners[scantoken(true)]()
+                    end
+                end
+                l[i] = d
+            else
+                local e = scanexpression(true)
+                l[i] = (typescanners[e] or scanexpression)()
+            end
+            if scantoken() == rightbrace_code then
+                break
+            else
+             -- whatever
+            end
+        end
+        return l
+    end
+end
+
+tokenscanners = {
+    [leftbrace_code] = scanset,
+    [numeric_code]   = scannumeric,
+    [string_code]    = scanstring,
+    [nullary_code]   = scanboolean,   -- todo
+}
+
+typescanners = {
+    [types.known]     = scannumeric,
+    [types.numeric]   = scannumeric,
+    [types.string]    = scanstring,
+    [types.boolean]   = scanboolean,
+    [types.pair]      = function() return scanpair     (true) end,
+    [types.color]     = function() return scancolor    (true) end,
+    [types.cmykcolor] = function() return scancmykcolor(true) end,
+    [types.transform] = function() return scantransform(true) end,
+    [types.path]      = scanpath,
+    [types.pen]       = scanpen,
+}
+
+table.setmetatableindex(tokenscanners,function()
+    local e = scanexpression(true)
+    return typescanners[e] or scanexpression
+end)
+
+scanners.typescanners  = typescanners
+scanners.tokenscanners = tokenscanners
+
+scanners.whatever = function()
+    local kind = scantoken(true)
+    if kind == leftdelimiter_code or kind == tag_code or kind == capsule_code then
+        return (typescanners[scanexpression(true)] or scanexpression)()
+    else
+        return tokenscanners[kind]()
+    end
+end
+
+-- a key like 'color' has code 'declare'
+
+local function scanparameters(fenced)
+    local data  = { }
+    local close = "]"
+    if not fenced then
+        close = ";"
+    elseif scansymbol(true) == "[" then
+        scansymbol()
+    else
+        return data
+    end
+    while true do
+     -- local s = scansymbol()
+        local s = scansymbol(false,false) -- keep expand
+        if s == close then
+            break;
+        elseif s == "," then
+            -- continue
+        else
+--             local t = scantoken(true)
+--             if t == equals_code or t == colon_code then
+--                 -- optional equal or :
+--                 scantoken()
+--             else
+--             end
+--             local kind = scantoken(true)
+
+-- test:
+--
+            local kind = scantoken(true)
+            if kind == equals_code or kind == colon_code then
+                -- optional equal or :
+                scantoken()
+                local kind = scantoken(true)
+            end
+
+            if kind == leftdelimiter_code or kind == tag_code or kind == capsule_code then
+                kind = scanexpression(true)
+                data[s] = (typescanners[kind] or scanexpression)()
+            elseif kind == leftbracket_code then
+                data[s] = get_parameters(true)
+            else
+                data[s] = tokenscanners[kind]()
+            end
+        end
+    end
+    return data
+end
+
+local namespaces = { }
+local presets    = { }
+local passed     = { }
+
+local function get_parameters(nested)
+    local data = { }
+    if nested or scansymbol(true) == "[" then
+        scansymbol()
+    else
+        return data
+    end
+    while true do
+        local s = scansymbol(false,false)
+        if s == "]" then
+            break;
+        elseif s == "," then
+            goto again
+        elseif s == "[" then
+--             s = scannumeric()
+            s = scaninteger()
+            if scantoken() == rightbracket_code then
+                goto assign
+            else
+                report("] expected")
+            end
+        else
+            goto assign
+        end
+      ::assign::
+        local t = scantoken(true)
+        if t == equals_code or t == colon_code then
+            -- optional equal or :
+            scantoken()
+        end
+        local kind = scantoken(true)
+        if kind == leftdelimiter_code or kind == tag_code or kind == capsule_code then
+            kind = scanexpression(true)
+            data[s] = (typescanners[kind] or scanexpression)()
+        elseif kind == leftbracket_code then
+            data[s] = get_parameters(true)
+        elseif kind == comma_code then
+            goto again
+        else
+            data[s] = tokenscanners[kind]()
+        end
+      ::again::
+    end
+    return data
+end
+
+local function getparameters()
+    local namespace  = scanstring()
+    -- same as below
+    local parameters = get_parameters()
+    local presets    = presets[namespace]
+    local passed     = passed[namespace]
+    if passed then
+        if presets then
+            setmetatableindex(passed,presets)
+        end
+        setmetatableindex(parameters,passed)
+    elseif presets then
+        setmetatableindex(parameters,presets)
+    end
+    namespaces[namespace] = parameters
+end
+
+local function applyparameters()
+    local saved      = namespaces
+    local namespace  = scanstring()
+    local action     = scanstring() -- before we scan the parameters
+    -- same as above
+    local parameters = get_parameters()
+    local presets    = presets[namespace]
+    local passed     = passed[namespace]
+    if passed then
+        if presets then
+            setmetatableindex(passed,presets)
+        end
+        setmetatableindex(parameters,passed)
+    elseif presets then
+        setmetatableindex(parameters,presets)
+    end
+    namespaces[namespace] = parameters
+    -- till here
+ -- mpprint(action)
+    namespaces = saved
+    return action
+end
+
+local knownparameters    = { }
+metapost.knownparameters = knownparameters
+
+local function presetparameters()
+    local namespace = scanstring()
+    local parent = nil
+    local t = scantoken(true)
+    if t == string_code then
+        parent = presets[scanstring()]
+    end
+    local p = get_parameters()
+    for k in next, p do
+        knownparameters[k] = true
+    end
+    if parent then
+        setmetatableindex(p,parent)
+    end
+    presets[namespace] = p
+end
+
+local function collectnames()
+    local l = { } -- can be reused but then we can't nest
+    local n = 0
+    while true do
+        local t = scantoken(true)
+        -- (1) not really needed
+        if t == numeric_code then
+            n = n + 1 l[n] = scannumeric(1) -- so a float even if it is an index
+        elseif t == string_code then
+            n = n + 1 l[n] = scanstring(1)
+        elseif t == nullary_code then
+            n = n + 1 l[n] = scanboolean(1)
+        elseif t == leftbracket_code then
+            scantoken() -- leftbacket
+            n = n + 1 l[n] = scaninteger(1) -- forces an index
+            scantoken() -- rightbacket
+        elseif t == leftdelimiter_code or t == tag_code or t == capsule_code then
+            t = scanexpression(true)
+            n = n + 1 l[n] = (typescanners[t] or scanexpression)()
+        else
+            break
+        end
+    end
+    return l, n
+end
+
+local function get(v)
+    local t = type(v)
+    if t == "number" then
+        return injectnumeric(v)
+    elseif t == "boolean" then
+        return injectboolean(v)
+    elseif t == "string" then
+        return injectstring(v)
+    elseif t == "table" then
+        local n = #v
+        if type(v[1]) == "table" then
+            return injectpath(v)
+        elseif n == 2 then
+            return injectpair(v)
+        elseif n == 3 then
+            return injecttriplet(v)
+        elseif n == 4 then
+            return injectquadruple(v)
+        elseif n == 6 then
+            return injecttransform(v)
+        end
+    end
+    return injectnumeric(0)
+end
+
+local stack = { }
+
+local function pushparameters()
+    local l, n = collectnames()
+    insert(stack,namespaces)
+    for i=1,n do
+        local n = namespaces[l[i]]
+        if type(n) == "table" then
+            namespaces = n
+        else
+            break
+        end
+    end
+end
+
+local function popparameters()
+    local n = remove(stack)
+    if n then
+        namespaces = n
+    else
+        report("stack error")
+    end
+end
+
+-- todo:
+
+local function getparameter(v)
+    local list, n = collectnames()
+    if not v then
+        v = namespaces
+    end
+    for i=1,n do
+        local l = list[i]
+        local vl = v[l]
+        if vl == nil then
+            if type(l) == "number" then
+                vl = v[1]
+                if vl == nil then
+                    return injectnumeric(0)
+                end
+            else
+                return injectnumeric(0)
+            end
+        end
+        v = vl
+    end
+    if v == nil then
+        return 0
+    else
+        return v
+    end
+end
+
+local function hasparameter()
+    local list, n = collectnames()
+    local v = namespaces
+    for i=1,n do
+        local l = list[i]
+        local vl = rawget(v,l)
+        if vl == nil then
+            if type(l) == "number" then
+                vl = rawget(v,1)
+                if vl == nil then
+                    return injectboolean(false)
+                end
+            else
+                return injectboolean(false)
+            end
+        end
+        v = vl
+    end
+ -- if v == nil then
+ --     return injectboolean(false)
+ -- else
+ --     return injectboolean(true)
+ -- end
+    return v ~= nil
+end
+
+local function hasoption()
+    local list, n = collectnames()
+    if n > 1 then
+        local v = namespaces
+        if n > 2 then
+            for i=1,n-1 do
+                local l = list[i]
+                local vl = v[l]
+                if vl == nil then
+                 -- return injectboolean(false)
+                    return false
+                end
+                v = vl
+            end
+        else
+            v = v[list[1]]
+        end
+        if type(v) == "string" then
+            -- no caching .. slow anyway
+            local o = list[n]
+            if v == o then
+             -- return injectboolean(true)
+                return true
+            end
+            for vv in gmatch(v,"[^%s,]+") do
+                for oo in gmatch(o,"[^%s,]+") do
+                    if vv == oo then
+                     -- return injectboolean(true)
+                        return true
+                    end
+                end
+            end
+        end
+    end
+ -- return injectboolean(false)
+    return false
+end
+
+local function getparameterdefault()
+    local list, n = collectnames()
+    local v = namespaces
+    if n == 1 then
+        local l = list[1]
+        local vl = v[l]
+        if vl == nil then
+            -- maybe backtrack
+            local top = stack[#stack]
+            if top then
+                vl = top[l]
+            end
+        end
+        if vl == nil then
+         -- return injectnumeric(0)
+            return 0
+        else
+            if type(vl) == "string" then
+                local td = type(list[n])
+                if td == "number" then
+                    vl = tonumber(vl)
+                elseif td == "boolean" then
+                    vl = vl == "true"
+                end
+            end
+         -- return get(vl)
+            return vl
+        end
+    else
+        for i=1,n-1 do
+            local l = list[i]
+            local vl = v[l]
+            if vl == nil then
+                if type(l) == "number" then
+                    vl = v[1]
+                    if vl == nil then
+                     -- return get(list[n])
+                        return list[n]
+                    end
+                else
+                    local last = list[n]
+                    if last == "*" then
+                        -- so, only when not pushed
+                        local m = getmetatable(namespaces[list[1]])
+                        if n then
+                            m = m.__index -- can also be a _m_
+                        end
+                        if m then
+                            local v = m
+                            for i=2,n-1 do
+                                local l = list[i]
+                                local vl = v[l]
+                                if vl == nil then
+                                 -- return injectnumeric(0)
+                                    return 0
+                                end
+                                v = vl
+                            end
+                            if v == nil then
+                                return 0
+                            else
+                                return v
+                            end
+                        end
+                     -- return injectnumeric(0)
+                        return 0
+                    else
+                     -- return get(last)
+                        return last
+                    end
+                end
+            end
+            v = vl
+        end
+        if v == nil then
+         -- return get(list[n])
+            return list[n]
+        else
+            if type(v) == "string" then
+                local td = type(list[n])
+                if td == "number" then
+                    v = tonumber(v)
+                elseif td == "boolean" then
+                    v = v == "true"
+                end
+            end
+         -- return get(v)
+            return v
+        end
+    end
+end
+
+local function getparametercount()
+    local list, n = collectnames()
+    local v = namespaces
+    for i=1,n do
+        v = v[list[i]]
+        if not v then
+            break
+        end
+    end
+ -- return injectnumeric(type(v) == "table" and #v or 0)
+    return type(v) == "table" and #v or 0
+end
+
+local function getmaxparametercount()
+    local list, n = collectnames()
+    local v = namespaces
+    for i=1,n do
+        v = v[list[i]]
+        if not v then
+            break
+        end
+    end
+    local n = 0
+    if type(v) == "table" then
+        local v1 = v[1]
+        if type(v1) == "table" then
+            n = #v1
+            for i=2,#v do
+                local vi = v[i]
+                if type(vi) == "table" then
+                    local vn = #vi
+                    if vn > n then
+                        n = vn
+                    end
+                else
+                    break;
+                end
+            end
+        end
+
+    end
+ -- return injectnumeric(n)
+    return n
+end
+
+local validconnectors = {
+    [".."]  = true,
+    ["..."] = true,
+    ["--"]  = true,
+}
+
+local function getparameterpath()
+    local list, n = collectnames()
+    local close = list[n]
+    if type(close) == "boolean" then
+        n = n - 1
+    else
+     -- close = false
+        close = nil
+    end
+    local connector = list[n]
+    if type(connector) == "string" and validconnectors[connector] then
+        n = n - 1
+    else
+        connector = "--"
+    end
+    local v = namespaces
+    for i=1,n do
+        v = v[list[i]]
+        if not v then
+            break
+        end
+    end
+    if type(v) == "table" then
+        return injectpath(v,connector,close)
+    elseif type(v) == "string" then
+        local code = load("return " .. v)
+        if code then
+            return code()
+        end
+    else
+        return injectpair(0,0)
+    end
+end
+
+local function getparameterpen()
+    local list, n = collectnames()
+    local v = namespaces
+    for i=1,n do
+        v = v[list[i]]
+        if not v then
+            break
+        end
+    end
+    if type(v) == "table" then
+        return injectpath(v,"..",true)
+    else
+        return injectpair(0,0)
+    end
+end
+
+local function getparametertext()
+    local list, n = collectnames()
+    local strut = list[n]
+    if type(strut) == "boolean" then
+        n = n - 1
+    else
+        strut = false
+    end
+    local v = namespaces
+    for i=1,n do
+        v = v[list[i]]
+        if not v then
+            break
+        end
+    end
+    if type(v) == "string" then
+        return injectstring("\\strut " .. v)
+    else
+        return injectstring("")
+    end
+end
+
+-- local function getparameteroption()
+--     local list, n = collectnames()
+--     local last = list[n]
+--     if type(last) == "string" then
+--         n = n - 1
+--     else
+--         return false
+--     end
+--     local v = namespaces
+--     for i=1,n do
+--         v = v[list[i]]
+--         if not v then
+--             break
+--         end
+--     end
+--     if type(v) == "string" and v ~= "" then
+--         for s in gmatch(v,"[^ ,]+") do
+--             if s == last then
+--                 return true
+--             end
+--         end
+--     end
+--     return false
+-- end
+
+function metapost.scanparameters(gobblesemicolon)
+    if gobblesemicolon then
+        scantoken() -- we scan the semicolon
+    end
+    return get_parameters()
+end
+
+local registerscript = metapost.registerscript
+local registerdirect = metapost.registerdirect
+local registertokens = metapost.registertokens
+
+registerdirect("getparameters",       getparameters)        -- nothing
+registertokens("applyparameters",     applyparameters)      -- action    : todo "token"
+registerdirect("presetparameters",    presetparameters)     -- nothing
+registerdirect("hasparameter",        hasparameter)         -- boolean
+registerdirect("hasoption",           hasoption)            -- boolean
+registerdirect("getparameter",        getparameter)         -- whatever
+registerdirect("getparameterdefault", getparameterdefault)  -- whatever
+registerdirect("getparametercount",   getparametercount)    -- numeric
+registerdirect("getmaxparametercount",getmaxparametercount) -- numeric
+registerscript("getparameterpath",    getparameterpath)     -- tricky
+registerscript("getparameterpen",     getparameterpen)      -- tricky
+registerscript("getparametertext",    getparametertext)     -- tricky
+--------direct("getparameteroption",  getparameteroption)   -- boolean
+registerdirect("pushparameters",      pushparameters)       -- nothing
+registerdirect("popparameters",       popparameters)        -- nothing
+
+function metapost.getparameter(list)
+    local n = #list
+    local v = namespaces
+    for i=1,n do
+        local l = list[i]
+        local vl = v[l]
+        if vl == nil then
+            return
+        end
+        v = vl
+    end
+    return v
+end
+
+function metapost.getparameterset(namespace)
+    return namespace and namespaces[namespace] or namespaces
+end
+
+function metapost.setparameterset(namespace,t)
+    namespaces[namespace] = t
+end
+
+function metapost.getparameterpreset(namespace,t)
+    return namespace and presets[namespace] or presets
+end
+
+local function setluaparameter()
+    local namespace = scanstring()
+    local name      = scanstring()
+    local value     = scanstring()
+    local code      = load("return " .. value)
+    if type(code) == "function" then
+        local result = code()
+        if result then
+            local data = namespace and namespaces[namespace] or namespaces
+            data[name] = result
+        else
+            report("no result from lua code: %s",value)
+        end
+    else
+        report("invalid lua code: %s",value)
+    end
+end
+
+registerdirect("setluaparameter", setluaparameter)
+
+-- This is an experiment for Alan and me.
+
+do
+
+    local records    = { }
+    local stack      = setmetatableindex("table")
+    local nofrecords = 0
+    local interim    = 0
+    local names      = { }
+ -- local types      = { }
+
+    registerdirect("newrecord", function()
+        scantoken() -- semicolon
+        local p = get_parameters()
+        local n = 0
+        if interim > 0 then
+            records[interim] = p
+            local top = stack[interim]
+            if top then
+                top = stack[interim][#top]
+                if top then
+                    setmetatableindex(p,top)
+                end
+            end
+            n = interim
+            interim = 0
+        else
+            nofrecords = nofrecords + 1
+            records[nofrecords] = p
+            n = nofrecords
+        end
+        return n
+    end)
+
+    local function merge(old,new)
+        for knew, vnew in next, new do
+            local vold = old[knew]
+            if vold then
+                if type(vnew) == "table" then
+                    if type(vold) == "table" then
+                        merge(vold,vnew)
+                    else
+                        old[knew] = vnew
+                    end
+                else
+                    old[knew] = vnew
+                end
+            else
+                old[knew] = vnew
+            end
+        end
+    end
+
+    registerdirect("setrecord", function()
+        scantoken() -- semicolon
+        local p = get_parameters()
+        local n = 0
+        if interim > 0 then
+            local r = records[interim]
+            if r then
+                merge(r,p)
+            else
+                records[interim] = p
+            end
+            local top = stack[interim]
+            if top then
+                top = stack[interim][#top]
+                if top then
+                    setmetatableindex(p,top)
+                end
+            end
+            n = interim
+            interim = 0
+        else
+            nofrecords = nofrecords + 1
+            records[nofrecords] = p
+            n = nofrecords
+        end
+        return n
+    end)
+
+
+    registerdirect("getrecord", function()
+        local n = scaninteger()
+        local v = records[n]
+        while true do
+            local t = scansymbol(true)
+            if t == ";" or t == ")" or t == ":" then
+                return v
+            elseif t == "." then
+                scansymbol()
+            elseif t == "#" or t == "##" then -- from tex's we get a double
+                scansymbol()
+                t = scansymbol()
+                v = v[t]
+                return type(v) == "table" and #v or 0
+            elseif t == "[" then
+                scansymbol()
+                t = scansymbol(true)
+                if t == "]" then
+                    scansymbol()
+                    return #v
+                else
+                    t = scaninteger()
+                    v = v[t]
+                    if scansymbol() ~= "]" then
+                        report("] expected")
+                    end
+                end
+            else
+                t = scansymbol()
+                v = v[t]
+            end
+        end
+    end)
+
+--     registerdirect("getrecord", function()
+--         local n = scaninteger()
+--         local v = records[n]
+--         local l = 0
+--         while true do
+--             local t = scansymbol(true)
+--             if t == ";" or t == ":" then
+--                 return v
+--             elseif t == "(" then
+--                 scansymbol()
+--                 l = l + 1
+--             elseif t == ")" then
+--                 if l > 1 then
+--                     scansymbol()
+--                     l = l - 1
+--                 elseif l == 1 then
+--                     scansymbol()
+--                     return v
+--                 else
+--                     return v
+--                 end
+--             elseif t == "." then
+--                 scansymbol()
+--             elseif t == "#" or t == "##" then -- from tex's we get a double
+--                 scansymbol()
+--                 t = scansymbol()
+--                 v = v[t]
+--                 local tv = type(v)
+--                 return (tv == "table" or tv == "string") and #v or 0
+--             elseif t == "[" then
+--                 scansymbol()
+-- t = scansymbol(true)
+-- if t == "#" or r == "##" then
+--     scansymbol()
+--     if scansymbol() ~= "]" then
+--         report("] expected")
+--     end
+--     return #v
+-- else
+--                     t = scaninteger()
+--                     v = v[t]
+--                     if scansymbol() ~= "]" then
+--                         report("] expected")
+--                     end
+-- end
+--             else
+--                 t = scansymbol()
+--                 v = v[t]
+--             end
+--         end
+--     end)
+
+    registerdirect("cntrecord", function()
+        local n = scaninteger()
+        local v = records[n]
+        local l = 0
+        while true do
+            local t = scansymbol(true)
+            if t == ";" or t == ":" then
+                break
+            elseif t == "(" then
+                scansymbol()
+                l = l + 1
+            elseif t == ")" then
+                if l > 1 then
+                    scansymbol()
+                    l = l - 1
+                elseif l == 1 then
+                    scansymbol()
+                    break
+                else
+                    break
+                end
+            elseif t == "." then
+                scansymbol()
+            elseif t == "[" then
+                scansymbol()
+                t = scaninteger()
+                v = v[t]
+                if scansymbol() ~= "]" then
+                    report("] expected")
+                end
+            else
+                t = scansymbol()
+                v = v[t]
+            end
+        end
+        local tv = type(v)
+        return (tv == "table" or tv == "string") and #v or 0 -- integer
+    end)
+
+    function metapost.getrecord(name)
+        local index = names[name]
+        if index then
+            return records[index]
+        end
+    end
+
+    function metapost.setrecord(name,data)
+        if type(data) == "table" then
+            local index = names[name]
+            if index then
+                records[index] = data
+            end
+        end
+    end
+
+    function metapost.runinternal(action,index,kind,name)
+        if action == 0 then
+            -- allocate
+            names[name] = index
+         -- types[index] = kind
+        elseif action == 1 then
+            -- save
+            insert(stack[index],records[index])
+            interim = index
+        elseif action == 2 then
+            -- restore
+            records[index] = remove(stack[index]) or records[index]
+        elseif action == 3 then
+            metapost.checktracingonline(kind)
+        end
+    end
+
+end
+
+-- goodies
+
+registerdirect("definecolor", function()
+    scantoken() -- we scan the semicolon
+    local s = get_parameters()
+    attributes.colors.defineprocesscolordirect(s)
+end)
+
+-- tex scanners
+
+local scanners      = tokens.scanners
+local scanhash      = scanners.hash
+local scanstring    = scanners.string
+local scanvalue     = scanners.value
+local scaninteger   = scanners.integer
+local scanboolean   = scanners.boolean
+local scanfloat     = scanners.float
+local scandimension = scanners.dimension
+
+local definitions   = { }
+
+local bpfactor      = number.dimenfactors.bp
+local comma         = byte(",")
+local close         = byte("]")
+
+local scanrest      = function() return scanvalue(comma,close) or "" end
+local scandimension = function() return scandimension() * bpfactor end
+
+local scanners = {
+    ["integer"]   = scaninteger,
+    ["number"]    = scanfloat,
+    ["numeric"]   = scanfloat,
+    ["boolean"]   = scanboolean,
+    ["string"]    = scanrest,
+    ["dimension"] = scandimension,
+}
+
+interfaces.implement {
+    name      = "lmt_parameters_define",
+    arguments = "string",
+    actions   = function(namespace)
+        local d = scanhash()
+        for k, v in next, d do
+            d[k] = scanners[v] or scanrest
+        end
+        definitions[namespace] = d
+    end,
+}
+
+interfaces.implement {
+    name      = "lmt_parameters_preset",
+    arguments = "string",
+    actions   = function(namespace)
+        passed[namespace] = scanhash(definitions[namespace])
+    end,
+}
+
+interfaces.implement {
+    name      = "lmt_parameters_reset",
+    arguments = "string",
+    actions   = function(namespace)
+        passed[namespace] = nil
+    end,
+}

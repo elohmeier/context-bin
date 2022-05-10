@@ -1,0 +1,13 @@
+if not modules then modules = { } end modules ['node-bwc'] = {
+    version   = 1.001,
+    comment   = "companion to node-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+-- This is a backward compatinility list. Eventually it will go away although a few
+-- might stay around. We start with some real low level ones. But ... users are
+-- supposed to use nodes and nuts.
+--
+-- Gone.

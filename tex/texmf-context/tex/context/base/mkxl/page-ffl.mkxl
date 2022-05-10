@@ -1,0 +1,371 @@
+%D \module
+%D   [       file=page-ffl,
+%D        version=2018.01.04,
+%D          title=\CONTEXT\ Page Macros,
+%D       subtitle=Facing floats,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Page Macros / Facing floats}
+
+%D The code below comes from a module made for Thomas Schmitz and is now part of the
+%D core. A simple example is given here:
+%D
+%D \starttyping
+%D \definefacingfloat
+%D   [whatever]
+%D
+%D \setupfacingfloat
+%D   [whatever]
+%D   [style=bold,
+%D    width=frame,
+%D    offset=10pt,
+%D    color=white]
+%D
+%D \setupfacingfloat
+%D   [whatever:left]
+%D   [background=color,
+%D    backgroundcolor=red]
+%D
+%D \setupfacingfloat
+%D   [whatever:right]
+%D   [background=color,
+%D    backgroundcolor=green]
+%D
+%D \startfacingfloat[whatever]
+%D     {\dorecurse{10}{\samplefile{tufte} }}
+%D     {\dorecurse{10}{\samplefile{ward}  }}
+%D     {\dorecurse{10}{\samplefile{tufte} }}
+%D     {\dorecurse{10}{\samplefile{ward}  }}
+%D \stopfacingfloat
+%D
+%D \startfacingfloat[whatever]
+%D     \startcontent \dorecurse{10}{\samplefile{tufte} } \stopcontent
+%D     \startcontent \dorecurse{10}{\samplefile{ward}  } \stopcontent
+%D     \startcontent \dorecurse{10}{\samplefile{tufte} } \stopcontent
+%D     \startcontent \dorecurse{10}{\samplefile{ward}  } \stopcontent
+%D \stopfacingfloat
+%D
+%D \flushfacingfloats[whatever]
+%D
+%D \dorecurse{10}{\samplefile{sapolsky} }
+%D
+%D \flushpendingtopcontent
+%D
+%D \stoptyping
+%D
+%D The idea is to flush related floats more or less in parallel.
+
+\unprotect
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% \starttext
+%
+% \registertopcontent[3]\vbox{\framed[align=normal,width=\textwidth]{\samplefile{ward}}}
+% \registertopcontent[3]\vbox{\framed[align=normal,width=\textwidth]{\samplefile{davis}}}
+% \registertopcontent[5]\vbox{\framed[align=normal,width=\textwidth]{\samplefile{ward}}}
+%
+% \dorecurse{20}{\samplefile{tufte}\par}
+%
+% \stoptext
+
+\newdimen\d_page_adapts_preroll
+\newcount\c_page_adapts_pushed
+
+% this assumes a constant textheight and no adaptations otherwise so we
+% should block these for already set pages in adaptheight .. or we can
+% make these independent (so not use adaptheight)
+
+\def\page_adapts_layout_preroll#1%
+  {\begingroup
+   \global\d_page_adapts_preroll\zeropoint
+   \def\page_adapts_layout_indeed##1%
+     {\setupcurrentadaptlayout[\c!top=\zeropoint,##1]%
+      \global\d_page_adapts_preroll\dimexpr\adaptlayoutparameter\c!top\relax}
+   \begincsname\??pageadaptations\number#1\endcsname
+   \endgroup}
+
+\permanent\protected\def\registertopcontent[#1]%
+  {\begingroup
+   \dowithnextbox
+     {\page_adapts_layout_preroll{#1}%
+      \scratchdimen\dimexpr
+        \htdp\nextbox+\d_page_adapts_preroll
+        \ifzeropt\d_page_adapts_preroll
+          +\lineheight
+        \fi
+      \relax
+      \putboxincache{\v!page:\number#1}{+}\nextbox
+      \normalexpanded{\adaptlayout[\number#1][\c!top=\the\scratchdimen]}%
+      \global\advance\c_page_adapts_pushed\plusone
+      \endgroup}}
+
+\def\page_otr_flush_top_content
+  {\scratchcounter\getboxcountfromcache{\v!page:\number\realpageno}\relax
+   \ifcase\scratchcounter\else
+      \dorecurse\scratchcounter
+        {\directboxfromcache{\v!page:\number\realpageno}\recurselevel
+         \nointerlineskip
+         \par}%
+      \disposeboxesincache{\v!page:\number\realpageno}%
+      \global\advance\c_page_adapts_pushed\minusone
+      \nointerlineskip
+   \fi}
+
+\permanent\protected\def\flushpendingtopcontent
+  {\ifcase\c_page_adapts_pushed\else
+     \null
+     \page
+     \expandafter\flushpendingtopcontent
+  \fi}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% \let\page_check_weird_page\relax
+
+\def\page_check_weird_page_indeed % for now only when facing floats
+  {\ifdim\vsize>\zeropoint\else
+      %\showmessage\m!layouts9{}%
+      \writestatus\m!layouts{forcing zero height page}%
+      \emptyhbox\page
+   \fi}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% width:
+%
+% -- fit       : do nothing
+% -- dimension : use that
+% -- frame     : use hsize minus frame offsets (based on preroll)
+
+\installcorenamespace {facingfloat}
+
+\installframedcommandhandler \??facingfloat {facingfloat} \??facingfloat
+
+\setupfacingfloat
+  [\c!spaceinbetween=\v!big,
+   \c!inbetween={\blank[\v!big]},
+  %\c!page=\v!left, % not used
+  %\c!style,
+  %\c!color,
+   \c!width=\v!fit]
+
+\newcount\c_defining_facing_float
+
+\appendtoks
+  \advance\c_defining_facing_float\plusone
+  \ifcase\c_defining_facing_float\or
+      \expanded{
+        \definefacingfloat[\currentfacingfloat:\v!left ][\currentfacingfloat]%
+        \definefacingfloat[\currentfacingfloat:\v!right][\currentfacingfloat]%
+      }%
+    \fi
+  \advance\c_defining_facing_float\minusone
+\to \everydefinefacingfloat
+
+\newcount\c_strc_floats_facing_saved
+\newcount\c_strc_floats_facing_flushed
+
+\newbox\b_strc_floats_facing_l
+\newbox\b_strc_floats_facing_r
+
+\let\m_strc_floats_state\relax
+
+\installcorenamespace {facingfloatflusher}
+
+\def\strc_floats_facing_flush_indeed_step#1#2#3%
+  {\ifnum#2<#3\relax
+     \advance#2\plusone
+     \donetrue
+     \writestatus
+       {facing}
+       {page: \the\scratchcounterone, location: #1, blob: \the#2, max: \the#3}%
+     \registertopcontent
+       [\scratchcounterone]
+       \hbox{\directboxfromcache{\currentfacingfloat:#1}{\the#2}}%
+   \fi}
+
+\def\strc_floats_facing_flush_indeed#1%
+  {\begingroup
+   \edef\currentfacingfloat{#1}%
+   \glet\page_check_weird_page\page_check_weird_page_indeed % for now only when facing floats
+   \scratchcounterone  \realpageno
+   \scratchcounterthree\getboxcountfromcache{\currentfacingfloat:\v!left }\relax
+   \scratchcounterfour \getboxcountfromcache{\currentfacingfloat:\v!right}\relax
+   \scratchcounterfive \zerocount
+   \scratchcountersix  \zerocount
+   % find first empty spread i.e. odd (left) and even (right) empty
+   \ifdim\pagetotal>\zeropoint
+     \advance\scratchcounterone\plusone
+   \fi
+   \ifodd\scratchcounterone
+     \advance\scratchcounterone\plusone
+   \fi
+   \writestatus
+     {facing}
+     {page: \the\scratchcounterone, start checking}%
+   \doloop{%
+       \page_adapts_layout_preroll\scratchcounterone
+       \ifzeropt\d_page_adapts_preroll
+         % left empty
+         \advance\scratchcounterone\plusone
+         \page_adapts_layout_preroll\scratchcounterone
+         \ifzeropt\d_page_adapts_preroll
+           % right empty
+           \advance\scratchcounterone\minusone
+           \exitloop
+         \fi
+       \else
+         \advance\scratchcounterone\plustwo
+       \fi
+   }
+   \writestatus
+     {facing}
+     {page: \the\scratchcounterone, start flushing}%
+   \doloop{%
+     \ifodd\scratchcounterone
+       \strc_floats_facing_flush_indeed_step\v!right\scratchcountersix \scratchcounterfour
+     \else
+       \strc_floats_facing_flush_indeed_step\v!left \scratchcounterfive\scratchcounterthree
+     \fi
+     \ifnum\scratchcountersix<\scratchcounterfour
+        % more
+     \orelse\ifnum\scratchcounterfive<\scratchcounterthree
+        % more
+     \else
+       \exitloop
+     \fi
+     \advance\scratchcounterone\plusone
+   }
+   \disposeboxesincache{\currentfacingfloat:\v!right}%
+   \disposeboxesincache{\currentfacingfloat:\v!left}%
+   \page_check_weird_page_indeed
+   \endgroup}
+
+\permanent\protected\tolerant\def\flushfacingfloats[#1]%
+  {\processcommalist[#1]\strc_floats_facing_flush_indeed}
+
+\protected\def\strc_floats_facing_setup
+  {\edef\currentfacingfloat{\currentfacingfloat:\m_strc_floats_state}%
+   \usefacingfloatstyleandcolor\c!style\v!color}
+
+\protected\def\strc_floats_facing_collect
+  {\ifx\m_strc_floats_state\v!left
+     \ifvoid\nextbox\orelse\ifzeropt\wd\nextbox\else
+       \ifvoid\b_strc_floats_facing_l
+         \setbox\b_strc_floats_facing_l\box\nextbox
+       \else
+         \setbox\b_strc_floats_facing_l\vbox\bgroup
+           \unvbox\b_strc_floats_facing_l
+           \facingfloatparameter\c!inbetween
+           \unvbox\nextbox
+         \egroup
+       \fi
+     \fi
+     \let\m_strc_floats_state\v!right
+   \orelse\ifx\m_strc_floats_state\v!right
+     \ifvoid\nextbox\orelse\ifzeropt\wd\nextbox\else
+       \ifvoid\b_strc_floats_facing_r
+         \setbox\b_strc_floats_facing_r\box\nextbox
+       \else
+         \setbox\b_strc_floats_facing_r\vbox\bgroup
+           \unvbox\b_strc_floats_facing_r
+           \facingfloatparameter\c!inbetween
+           \unvbox\nextbox
+         \egroup
+       \fi
+     \fi
+     \let\m_strc_floats_state\v!left
+   \else
+     \let\m_strc_floats_state\v!left
+   \fi}
+
+\protected\def\strc_floats_facing_handle
+  {\doifnextbgroupelse
+     \strc_floats_facing_handle_indeed
+     \strc_floats_facing_wrap_up}
+
+\protected\def\strc_floats_facing_handle_indeed
+  {\dowithnextboxcontent
+     \strc_floats_facing_setup
+     {\strc_floats_facing_collect\strc_floats_facing_handle}
+     \vbox}
+
+\permanent\protected\def\startfacingfloat[#1]%
+  {\begingroup
+   \edef\currentfacingfloat{#1}%
+   \edef\p_width{\facingfloatparameter\c!width}%
+   \letfacingfloatparameter\c!width\v!fit
+   \ifx\p_width\v!frame
+      \setbox\scratchbox\hpack{\inheritedfacingfloatframed{}}%
+      \advance\hsize-\wd\scratchbox
+   \orelse\ifx\p_width\v!fit
+      % whatever
+   \else
+      \hsize\p_width
+   \fi
+   \enforced\let\startcontent\bgroup
+   \enforced\let\stopcontent\egroup
+   \let\m_strc_floats_state\v!left
+   \strc_floats_facing_handle}
+
+\permanent\protected\def\stopfacingfloat
+  {\endgroup}
+
+\protected\def\strc_floats_facing_wrap_up
+  {\edef\p_spaceinbetween{\facingfloatparameter\c!spaceinbetween}%
+   \ifempty\p_spaceinbetween
+     \scratchdimen\zeropoint
+   \else
+     \setbox\scratchbox\vbox{\directvspacing\p_spaceinbetween}%
+     \scratchdimen\htdp\scratchbox
+   \fi
+   \ifvoid\b_strc_floats_facing_l\else
+     \page_postprocessors_linenumbers_box\b_strc_floats_facing_l
+   \fi
+   \ifvoid\b_strc_floats_facing_r\else
+     \page_postprocessors_linenumbers_box\b_strc_floats_facing_r
+   \fi
+   \doloop{%
+     \strc_floats_facing_flush_wrap\b_strc_floats_facing_l\v!left
+     \strc_floats_facing_flush_wrap\b_strc_floats_facing_r\v!right
+     \global\advance\c_strc_floats_facing_saved\plusone
+     \ifvoid\b_strc_floats_facing_l\relax\ifvoid\b_strc_floats_facing_r\relax
+       \exitloop
+     \fi\fi}}
+
+\def\strc_floats_facing_flush_wrap#1#2%
+  {\ifvoid#1\relax
+     % todo
+   \else
+     \begingroup
+     \setbox\scratchboxone\hpack\bgroup
+       \edef\currentfacingfloat{\currentfacingfloat:#2}%
+       \inheritedfacingfloatframed{\strut}%
+     \egroup
+     \scratchdimenone\dimexpr\textheight-\htdp\scratchboxone+\lineheight\relax
+     \dontcomplain
+     \splittopskip\zeropoint
+     \setbox\scratchbox\vsplit#1 upto \scratchdimenone
+     \setsplitlisthtdp\scratchbox\strutht\strutdp
+     \setbox\scratchbox\hpack\bgroup
+       \edef\currentfacingfloat{\currentfacingfloat:#2}%
+       \inheritedfacingfloatframed{\box\scratchbox}%
+     \egroup
+     \setbox\scratchbox\vbox
+       \ifdim\ht\scratchbox<\dimexpr\textheight-\scratchdimen\relax
+         {\box\scratchbox\directvspacing\p_spaceinbetween}%
+       \else
+         to \textheight{\box\scratchbox\vss}%
+       \fi
+     \putboxincache{\currentfacingfloat:#2}{+}\scratchbox
+     \endgroup
+   \fi}
+
+\protect \endinput

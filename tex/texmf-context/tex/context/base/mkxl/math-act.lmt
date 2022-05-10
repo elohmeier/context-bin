@@ -1,0 +1,1500 @@
+if not modules then modules = { } end modules ['math-act'] = {
+    version   = 1.001,
+    comment   = "companion to math-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+-- Here we tweak some font properties (if needed). The commented sections
+-- have been removed (no longer viable) but can be found in the .lua variant.
+
+local type, next = type, next
+local fastcopy, insert, remove = table.fastcopy, table.insert, table.remove
+local formatters = string.formatters
+local byte = string.byte
+local setmetatableindex, sortedhash  = table.setmetatableindex, table.sortedhash
+
+local trace_defining   = false  trackers.register("math.defining",   function(v) trace_defining   = v end)
+local trace_collecting = false  trackers.register("math.collecting", function(v) trace_collecting = v end)
+local trace_tweaking   = false  trackers.register("math.tweaks",     function(v) trace_tweaking   = v end)
+
+local report_math      = logs.reporter("mathematics","initializing")
+local report_mathtweak = logs.reporter("mathematics","tweak")
+
+local context          = context
+local commands         = commands
+local mathematics      = mathematics
+local texsetdimen      = tex.setdimen
+local abs              = math.abs
+
+local helpers          = fonts.helpers
+local upcommand        = helpers.commands.up
+local rightcommand     = helpers.commands.right
+local charcommand      = helpers.commands.char
+local prependcommands  = helpers.prependcommands
+
+local sequencers       = utilities.sequencers
+local appendgroup      = sequencers.appendgroup
+local appendaction     = sequencers.appendaction
+
+local fontchars        = fonts.hashes.characters
+local fontproperties   = fonts.hashes.properties
+
+local mathfontparameteractions = sequencers.new {
+    name      = "mathparameters",
+    arguments = "target,original",
+}
+
+appendgroup("mathparameters","before") -- user
+appendgroup("mathparameters","system") -- private
+appendgroup("mathparameters","after" ) -- user
+
+function fonts.constructors.assignmathparameters(original,target) -- wrong way around
+    local runner = mathfontparameteractions.runner
+    if runner then
+        runner(original,target)
+    end
+end
+
+function mathematics.initializeparameters(target,original)
+    local mathparameters = original.mathparameters
+    if mathparameters and next(mathparameters) then
+        mathparameters = mathematics.dimensions(mathparameters)
+        if not mathparameters.PrimeRaisePercent              then mathparameters.PrimeRaisePercent        = 25 end
+        if not mathparameters.PrimeShiftUp                   then mathparameters.PrimeShiftUp             = mathparameters.SuperscriptShiftUp end
+        if not mathparameters.PrimeBaselineDropMax           then mathparameters.PrimeBaselineDropMax     = mathparameters.SuperscriptBaselineDropMax end
+        if not mathparameters.PrimeShiftUpCramped            then mathparameters.PrimeShiftUpCramped      = mathparameters.SuperscriptShiftUpCramped end
+        if not mathparameters.PrimeSpaceAfter                then mathparameters.PrimeSpaceAfter          = 0 end
+        if not mathparameters.PrimeWidthPercent              then mathparameters.PrimeWidthPercent        = 50 end
+        if not mathparameters.SpaceBeforeScript              then mathparameters.SpaceBeforeScript        = mathparameters.SpaceAfterScript end
+        if not mathparameters.NoLimitSupFactor               then mathparameters.NoLimitSupFactor         = 0 end
+        if not mathparameters.NoLimitSubFactor               then mathparameters.NoLimitSubFactor         = 0 end
+        if not mathparameters.AccentTopShiftUp               then mathparameters.AccentTopShiftUp         = 0 end
+        if not mathparameters.AccentBottomShiftDown          then mathparameters.AccentBottomShiftDown    = 0 end
+        if not mathparameters.FlattenedAccentTopShiftUp      then mathparameters.AccentTopShiftUp         = 0 end
+        if not mathparameters.FlattenedAccentBottomShiftDown then mathparameters.AccentBottomShiftDown    = 0 end
+        if not mathparameters.AccentBaseDepth                then mathparameters.AccentBaseDepth          = 0 end
+        if not mathparameters.AccentFlattenedBaseDepth       then mathparameters.AccentFlattenedBaseDepth = 0 end
+        --
+        -- we don't want to reset that each time .. but then we also can't show what the value was
+        --
+     -- mathparameters.RadicalDegreeBefore = 0
+        --
+        target.mathparameters = mathparameters
+    end
+end
+
+sequencers.appendaction("mathparameters","system","mathematics.initializeparameters")
+
+local how = {
+ -- RadicalKernBeforeDegree         = "horizontal",
+ -- RadicalKernAfterDegree          = "horizontal",
+    ScriptPercentScaleDown          = "unscaled",
+    ScriptScriptPercentScaleDown    = "unscaled",
+    RadicalDegreeBottomRaisePercent = "unscaled",
+    NoLimitSupFactor                = "unscaled",
+    NoLimitSubFactor                = "unscaled",
+    PrimeRaisePercent               = "unscaled",
+    PrimeWidthPercent               = "unscaled",
+}
+
+function mathematics.scaleparameters(target,original)
+    if not target.properties.math_is_scaled then
+        local mathparameters = target.mathparameters
+        if mathparameters and next(mathparameters) then
+            local parameters = target.parameters
+            local factor  = parameters.factor
+            local hfactor = parameters.hfactor
+            local vfactor = parameters.vfactor
+            for name, value in next, mathparameters do
+                local h = how[name]
+                if h == "unscaled" then
+                    -- kept
+                elseif h == "horizontal" then
+                    value = value * hfactor
+                elseif h == "vertical"then
+                    value = value * vfactor
+                else
+                    value = value * factor
+                end
+               mathparameters[name] = value
+            end
+        end
+        target.properties.math_is_scaled = true
+    end
+end
+
+-- AccentBaseHeight vs FlattenedAccentBaseHeight
+
+function mathematics.checkaccentbaseheight(target,original)
+    local mathparameters = target.mathparameters
+    if mathparameters and mathparameters.AccentBaseHeight == 0 then
+        mathparameters.AccentBaseHeight = target.parameters.xheight -- needs checking
+    end
+end
+
+-- function mathematics.checkprivateparameters(target,original)
+--     local mathparameters = target.mathparameters
+--     if mathparameters then
+--         local parameters = target.parameters
+--         local properties = target.properties
+--         if parameters then
+--             local size = parameters.size
+--             if size then
+--                 -- gone
+--             elseif properties then
+--                 report_math("invalid parameters in font %a",properties.fullname or "?")
+--             else
+--                 report_math("invalid parameters in font")
+--             end
+--         elseif properties then
+--             report_math("no parameters in font %a",properties.fullname or "?")
+--         else
+--             report_math("no parameters and properties in font")
+--         end
+--     end
+-- end
+
+function mathematics.overloadparameters(target,original)
+    local mathparameters = target.mathparameters
+    if mathparameters and next(mathparameters) then
+        local goodies = target.goodies
+        if goodies then
+            for i=1,#goodies do
+                local goodie = goodies[i]
+                local mathematics = goodie.mathematics
+                if mathematics then
+                    local parameters = mathematics.parameters
+                    local bigslots   = mathematics.bigslots or mathematics.bigs
+                    if parameters then
+                        if trace_defining then
+                            report_math("overloading math parameters in %a @ %p",target.properties.fullname,target.parameters.size)
+                        end
+                        for name, value in next, parameters do
+                            local tvalue   = type(value)
+                            local oldvalue = mathparameters[name]
+                            local newvalue = oldvalue
+                            if tvalue == "number" then
+                                newvalue = value
+                            elseif tvalue == "string" then
+                                -- delay till all set
+                            elseif tvalue == "function" then
+                                newvalue = value(oldvalue,target,original)
+                            elseif not tvalue then
+                                newvalue = nil
+                            end
+                            if trace_defining and oldvalue ~= newvalue then
+                                report_math("overloading math parameter %a: %S => %S",name,oldvalue or 0,newvalue)
+                            end
+                            mathparameters[name] = newvalue
+                        end
+                        for name, value in next, parameters do
+                            local tvalue = type(value)
+                            if tvalue == "string" then
+                                local newvalue = mathparameters[value]
+                             -- if not newvalue then
+                             --     local code = loadstring("return " .. value,"","t",mathparameters)
+                             --     if type(code) == "function" then
+                             --         local okay, v = pcall(code)
+                             --         if okay then
+                             --             newvalue = v
+                             --         end
+                             --     end
+                             -- end
+                                if newvalue then
+                                    -- split in number and string
+                                    mathparameters[name] = newvalue
+                                elseif trace_defining then
+                                    report_math("ignoring math parameter %a: %S",name,value)
+                                end
+                            end
+                        end
+                    end
+                    if bigslots then
+                        target.bigslots = bigslots
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- a couple of predefined tweaks:
+
+local mathtweaks   = { }
+mathematics.tweaks = mathtweaks
+
+local function report_tweak(fmt,target,original,...)
+    if fmt then
+        local metadata   = original.shared.rawdata.metadata
+        local parameters = target.parameters
+        report_mathtweak(
+            "%a, size %p, math size %i, %s",
+            metadata and metadata.fontname or "unknown",
+            parameters.size or 655360,
+            parameters.mathsize or 1,
+            string.formatters[fmt](...)
+        )
+    else
+        report_mathtweak("")
+    end
+end
+
+do
+
+    local stepper = utilities.parsers.stepper
+    local count   = 0
+
+    local splitter = lpeg.tsplitat(".")
+
+    local function adapt(list,target,original,targetcharacters,originalcharacters,k,v,compact,n)
+        local character = targetcharacters[k]
+        if character then
+            if not character.tweaked then
+                local t = type(v)
+                if t == "number" then
+                    v = list[v]
+                    t = type(v)
+                end
+                if t == "table" then
+                    local width     = character.width
+                    local height    = character.height
+                    local depth     = character.depth
+                    local italic    = character.italic
+                    local topaccent = character.topaccent
+                    if #v > 0 then
+                        local offsetfactor = v[1]
+                        local widthfactor  = v[2]
+                        local italicfactor = v[3]
+                        local anchorfactor = v[4]
+                        if width then
+                            character.advance = width -- so advance is oldwidth
+                            character.xoffset = offsetfactor * width
+                            character.width   = widthfactor  * width
+                        end
+                        if italic then
+                            character.italic = italicfactor * italic
+                        elseif width and italicfactor ~= 1 then
+                            character.italic = italicfactor * width
+                        end
+                        if topaccent and topaccent > 0 then
+                            if anchorfactor then
+                                character.topaccent = anchorfactor * topaccent
+                            elseif width then
+                                character.topaccent = topaccent + (character.width - character.advance) / 2
+                            end
+                        end
+                    else
+                        local widthfactor   = v.width
+                        local heightfactor  = v.height
+                        local depthfactor   = v.depth
+                        local italicfactor  = v.italic
+                        local anchorfactor  = v.anchor
+                        local advancefactor = v.advance
+                        local xoffsetfactor = v.xoffset
+                        local yoffsetfactor = v.yoffset
+                        local scalefactor   = v.scale
+                        local total = (height or 0) + (depth or 0)
+                        if scalefactor ~= 1 then
+                            character.scale = scalefactor
+                        end
+                        if width and width ~= 0 then
+                            if advancefactor then
+                                character.advance = advancefactor * width
+                            end
+                            if widthfactor then
+                                character.width = widthfactor * width
+                            end
+                            if xoffsetfactor then
+                                character.xoffset = xoffsetfactor * width
+                            end
+                        end
+                        if height and height ~= 0 then
+                            if heightfactor then
+                                character.height  = heightfactor * height
+                            end
+                        end
+                        if depth and depthfactor then
+                            character.depth = depthfactor * depth
+                        end
+                        if yoffsetfactor then
+                            character.yoffset = yoffsetfactor * total
+                        end
+                        if italic and italic ~= 0 and italicfactor then
+                            character.italic = italicfactor * italic
+                        end
+                        if anchorfactor then
+                            character.topaccent = anchorfactor * (topaccent or width)
+                        end
+                    end
+                    if trace_tweaking then
+                        report_tweak("adapting dimensions of %U ",target,original,k)
+                    end
+                    local smaller = originalcharacters[k].smaller
+                    if compact and smaller and smaller ~= k then
+                        adapt(list,target,original,targetcharacters,originalcharacters,smaller,v,compact,n+1)
+                    end
+                    count = count + 1
+                else
+                    report_mathtweak("invalid dimension entry %U",k)
+                end
+                character.tweaked = true
+                if v.all then
+                    local nxt = character.next
+                    if nxt then
+                        adapt(list,target,original,targetcharacters,originalcharacters,nxt,v,compact,n)
+                    else
+                        local parts = character.hparts
+                        if parts then
+                            for i=1,#parts do
+                                adapt(list,target,original,targetcharacters,originalcharacters,parts[i],v,compact,n)
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            report_tweak("no character %U",target,original,k)
+        end
+    end
+
+    local function detail(characters,k)
+        if type(k) == "string" then
+            local t = lpeg.match(splitter,k)
+            local n = #t
+            if n > 0 then
+                local m = tonumber(t[1]) or tonumber(t[1],16)
+                if m then
+                    local c = characters[m]
+                    if c and n > 1 then
+                        m = t[2]
+                        if m == "parts" then
+                            local nxt = c.next
+                            while nxt do
+                                c = characters[nxt]
+                                nxt = c.next
+                            end
+                            c = c.hparts or c.vparts
+                            if c and n > 2 then
+                                m = tonumber(t[3])
+                                if m then
+                                    c = c[m]
+                                    if c then
+                                        return c.glyph
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    function mathtweaks.dimensions(target,original,parameters)
+        local list = parameters.list
+        if list then
+            local targetcharacters   = target.characters
+            local originalcharacters = original.characters
+            local compact = target.parameters.textscale and true or false
+            count = 0
+            for k, v in sortedhash(list) do
+                local t = type(k)
+                if t == "number" then
+                    adapt(list,target,original,targetcharacters,originalcharacters,k,v,compact,1)
+                elseif t == "string" then
+                    local d = detail(targetcharacters,k)
+                    if d then
+                        adapt(list,target,original,targetcharacters,originalcharacters,d,v,compact,1)
+                    else
+                        stepper(k,function(n)
+                            adapt(list,target,original,targetcharacters,originalcharacters,n,v,compact,1)
+                        end)
+                    end
+             -- elseif t == "table" then
+             --     for i=1,#t do
+             --         adapt(list,target,original,targetcharacters,originalcharacters,t[i],v,compact,1)
+             --     end
+                end
+            end
+            if trace_tweaking and count > 0 then
+                report_mathtweak("%i dimensions adapted",count)
+            end
+        end
+    end
+
+end
+
+do
+
+    function mathtweaks.replacements(target,original,parameters)
+        local list = parameters.list
+        if list then
+            local targetcharacters   = target.characters
+            local originalcharacters = original.characters
+            local unicodes = original.resources.unicodes
+            if unicodes then
+                local count = 0
+                for k, v in sortedhash(list) do
+                    if type(v) == "string" then
+                        v = unicodes[v]
+                    end
+                    if type(v) == "number" then
+                        targetcharacters[k] = targetcharacters[v]
+                        count = count + 1
+                    end
+                end
+                if trace_tweaking and count > 0 then
+                    report_mathtweak("%i permanent replacements",count)
+                end
+            end
+        end
+    end
+
+    function mathtweaks.substitutes(target,original,parameters)
+        local list = parameters.list
+        if list then
+            local targetcharacters   = target.characters
+            local originalcharacters = original.characters
+            local getsubstitution    = fonts.handlers.otf.getsubstitution
+            local count              = 0
+            for k, v in sortedhash(list) do
+                local sub = getsubstitution(original,k,v,true)
+                if sub then
+                    targetcharacters[k] = targetcharacters[sub]
+                    count = count + 1
+                end
+            end
+            if trace_tweaking and count > 0 then
+                report_mathtweak("%i permanent substitutions",count)
+            end
+        end
+    end
+
+    mathtweaks.replace    = mathtweaks.replacements
+    mathtweaks.substitute = mathtweaks.substitutes
+
+end
+
+do
+
+    -- What a mess ... should be a different alphabet.
+
+    local function expand(target,original,list,selector,feature)
+        if feature then
+            local getsubstitution = fonts.handlers.otf.getsubstitution
+            for _, char in next, list do
+                local variant = getsubstitution(original,char,feature,true)
+                if variant then
+                    mathematics.addvariant(target,char,variant,selector)
+                end
+            end
+        else
+            for i, char in next, list do
+                mathematics.addvariant(target,char,0xFE800+i,selector)
+            end
+        end
+    end
+
+    function mathtweaks.variants(target,original,parameters)
+        local feature  = parameters.feature
+        local selector = parameters.selector
+        local kind     = parameters.kind
+        if kind == "script" then
+            if selector then
+                expand(target,original,mathematics.alphabets.sr.tf.lcletters,selector,feature)
+                expand(target,original,mathematics.alphabets.sr.tf.ucletters,selector,feature)
+            end
+        end
+    end
+
+    mathtweaks.variant    = mathtweaks.variants
+
+end
+
+do
+
+    -- see changed hack in math-fbk
+
+    local copytable = table.copy
+    local nps = fonts.helpers.newprivateslot
+
+    local list = {
+        { 0x2032, { nps("prime 0x2032 1"), nps("prime 0x2032 2"), nps("prime 0x2032 3") }, 1 },
+        { 0x2033, { nps("prime 0x2033 1"), nps("prime 0x2033 2"), nps("prime 0x2033 3") }, 2 },
+        { 0x2034, { nps("prime 0x2034 1"), nps("prime 0x2034 2"), nps("prime 0x2034 3") }, 3 },
+        { 0x2057, { nps("prime 0x2057 1"), nps("prime 0x2057 2"), nps("prime 0x2057 3") }, 4 },
+        { 0x2035, { nps("prime 0x2035 1"), nps("prime 0x2035 2"), nps("prime 0x2035 3") }, 1 },
+        { 0x2036, { nps("prime 0x2036 1"), nps("prime 0x2036 2"), nps("prime 0x2036 3") }, 2 },
+        { 0x2037, { nps("prime 0x2037 1"), nps("prime 0x2037 2"), nps("prime 0x2037 3") }, 3 },
+    }
+
+    local function copytable(t)
+        return {
+            width   = t.width,
+            height  = t.height,
+            depth   = t.depth,
+            index   = t.index,
+            unicode = t.unicode,
+        }
+    end
+
+    local lastprivate
+
+    local function use(target,original,targetcharacters,charcode,private,newheight,scale,fake,keep,count,smaller)
+        if count == 1 then
+            lastprivate = private
+        end
+        if keep then
+            if trace_tweaking then
+                report_tweak("keeping prime %U",target,original,charcode)
+            end
+            return
+        end
+        if fake and count > 1 then
+            local olddata = targetcharacters[lastprivate]
+            if olddata then
+                -- todo: when keep
+                local oldheight = scale * olddata.height
+                local oldwidth  = scale * olddata.width
+                local yoffset   = (newheight - oldheight) / scale
+                local xoffset   = fake * oldwidth
+                local newwidth  = oldwidth + (count - 1) * xoffset
+                targetcharacters[charcode] = {
+                    yoffset  = yoffset,
+                    width    = newwidth,
+                    height   = newheight,
+                    smaller  = smaller,
+                    unicode  = olddata.unicode,
+                    commands = {
+                                      { "offset",           0, 0, lastprivate, scale, scale },
+                                      { "offset",     xoffset, 0, lastprivate, scale, scale },
+                        count > 2 and { "offset", 2 * xoffset, 0, lastprivate, scale, scale } or nil,
+                        count > 3 and { "offset", 3 * xoffset, 0, lastprivate, scale, scale } or nil,
+                    },
+                }
+                if trace_tweaking then
+                    report_tweak("faking %U with %i primes",target,original,charcode,count)
+                end
+                return
+            end
+        end
+        local olddata = targetcharacters[private]
+        if olddata then
+            local oldheight = scale * olddata.height
+            local oldwidth  = scale * olddata.width
+            local yoffset   = (newheight - oldheight) / scale
+            targetcharacters[charcode] = {
+                yoffset  = yoffset,
+                width    = oldwidth,
+                height   = newheight,
+                smaller  = smaller,
+                unicode  = olddata.unicode,
+                commands = {
+                    { "offset", 0, 0, private, scale, scale }
+                },
+            }
+            if trace_tweaking then
+                report_tweak("fixing prime %U",target,original,charcode)
+            end
+            return
+        end
+        if trace_tweaking then
+            report_tweak("unable to fix prime %U",target,original,charcode)
+        end
+    end
+
+    function mathtweaks.fixprimes(target,original,parameters)
+        local targetcharacters   = target.characters
+        local targetparameters   = target.parameters
+        local originalcharacters = original.characters
+        local factor    = parameters.factor or 0.85
+        local scale     = parameters.scale or 1
+        local smaller   = parameters.smaller
+        local fake      = parameters.fake
+        local keep      = parameters.keep and targetparameters.mathsize == 1
+        local newheight = factor * target.mathparameters.AccentBaseHeight
+        local compact   = targetparameters.textscale and true or false
+        --
+        lastprivate = false
+        -- make virtual copies (just all of them, also for tracing)
+        for i=1,#list do
+            local entry = list[i]
+            local count = entry[3]
+            if not fake or count == 1 then
+                local c1 = entry[1]
+                local d1 = targetcharacters[c1]
+                if d1 then
+                    local pc = entry[2]
+                    local c2 = d1.smaller or c1
+                    local d2 = targetcharacters[c2]
+                    local c3 = d2.smaller or c2
+                    local d3 = targetcharacters[c3]
+                    if smaller then
+                        d1 = d2
+                        d2 = d3
+                    end
+                    targetcharacters[pc[1]] = copytable(d1)
+                    targetcharacters[pc[2]] = copytable(d2)
+                    targetcharacters[pc[3]] = copytable(d3)
+                end
+            end
+        end
+        -- replace
+        for i=1,#list do
+            local entry = list[i]
+            local count = entry[3]
+            local c1    = entry[1]
+            local pc    = entry[2]
+            local s1    = pc[1]
+            local d1    = targetcharacters[c1]
+            if compact and d1 then
+                local c2 = d1.smaller or c1
+                local d2 = targetcharacters[c2]
+                local c3 = d2.smaller or c2
+                local s2 = pc[2]
+                local s3 = pc[3]
+                use(target,original,targetcharacters,c1,s1,newheight,scale,fake,keep, count,c2)
+                use(target,original,targetcharacters,c2,s2,newheight,scale,fake,false,count,c3)
+                use(target,original,targetcharacters,c3,s3,newheight,scale,fake,false,count)
+            else
+                use(target,original,targetcharacters,c1,s1,newheight,scale,fake,keep,count)
+            end
+        end
+    end
+
+end
+
+do
+
+    function mathtweaks.fixanchors(target,original,parameters)
+        local factor = tonumber(parameters.factor)
+        if factor ~= 0 then
+            for k, v in next, target.characters do
+                local a = v.topaccent
+                if a and a > 0 then
+                    v.topaccent = a *  factor
+                end
+            end
+        end
+    end
+
+end
+
+do
+
+    -- musical timestamp: March 2022, Antonio Sanches (Bad Hombre), live performance in NL
+
+    function mathtweaks.kerns(target,original,parameters)
+        local kerns = parameters.list
+        if kerns then
+            local characters = target.characters
+            local function kernone(unicode,data)
+                local chardata = characters[unicode]
+                local height = chardata.height or 0
+                local depth  = chardata.depth  or 0
+                local width  = chardata.width  or 0
+                local k = data.topleft     ; if k and k ~= 0 then chardata.topleft     = k * width end
+                local k = data.topright    ; if k and k ~= 0 then chardata.topright    = k * width end
+                local k = data.bottomleft  ; if k and k ~= 0 then chardata.bottomleft  = k * width end
+                local k = data.bottomright ; if k and k ~= 0 then chardata.bottomright = k * width end
+            end
+            for unicode, data in next, kerns do
+                kernone(unicode,data) -- withscriptcode(tfmdata,unicode,data,kernone)
+                -- also smaller
+            end
+        end
+    end
+
+end
+
+do
+
+ -- local list = {
+ --     [0x203E] = { factor = .4 }, -- overbar
+ --     [0x203E] = { factor = .7 }, -- underbar
+ --     [0x23DE] = { factor = .4 }, -- overbrace
+ --     [0x23DF] = { factor = .7 }, -- underbrace
+ --     [0x23DC] = { factor = .4 }, -- overparent
+ --     [0x23DD] = { factor = .7 }, -- underparent
+ --     [0x23B4] = { factor = .4 }, -- overbracket
+ --     [0x23B5] = { factor = .7 }, -- underbracket
+ -- }
+
+    -- We can patch the dimensions in-place or we can use additional characters in
+    -- the private namespace.
+
+    -- local addprivate = fonts.helpers.addprivate
+    -- local newnextglyph = addprivate(target,formatters["M-N-%H"](nextglyph),newnextdata)
+
+    local over  = { factor = "over"   }
+    local under = { factor = "under"  }
+
+    local candidates = {
+        over = {
+            [0x203E] = over,  -- overbar
+            [0x23DE] = over,  -- overbrace
+            [0x23DC] = over,  -- overparent
+            [0x23B4] = over,  -- overbracket
+        },
+        under = {
+            [0x23DF] = under, -- underbrace
+            [0x23DD] = under, -- underparent
+            [0x23B5] = under, -- underbracket
+        },
+        accent = {
+            [0x0300] = over,  -- widegrave
+            [0x0308] = over,  -- wideddot
+            [0x0304] = over,  -- widebar
+            [0x0301] = over,  -- wideacute
+            [0x0302] = over,  -- widehat
+            [0x030C] = over,  -- widecheck
+            [0x0306] = over,  -- widebreve
+            [0x0307] = over,  -- widedot
+            [0x030A] = over,  -- widering
+            [0x0303] = over,  -- widetilde
+            [0x20DB] = over,  -- widedddot
+        },
+    }
+
+    local function adapt(c,factor,baseheight,basedepth)
+        if not c.tweaked then
+            local height  = c.height or 0
+            local depth   = c.depth  or 0
+            local yoffset = 0
+            if factor == "over" then
+                local h = height - baseheight
+                yoffset = h - height
+                height  = h
+                depth   = depth - baseheight
+            elseif factor == "under" then
+                local d = depth - basedepth
+                yoffset = depth - d
+                depth   = d
+                height  = height - baseheight
+            else
+                if height > 0 then
+                    local h = tonumber(factor) * height
+                    yoffset = h - height
+                    height  = h
+                elseif depth > 0 then
+                    local d = tonumber(factor) * depth
+                    yoffset = depth - d
+                    depth   = d
+                end
+            end
+            c.yoffset = yoffset ~= 0 and yoffset or nil
+            c.height  = height   > 0 and height  or nil
+            c.depth   = depth    > 0 and depth   or nil
+            c.tweaked = true
+        end
+    end
+
+    local function process(characters,list,baseheight,basedepth)
+        if list then
+            for k, v in sortedhash(list) do -- sort for tracing
+                local c = characters[k]
+                if c and not c.yoffset then
+                    local factor = v.factor
+                    if factor then
+                        adapt(c,factor,baseheight,basedepth)
+                        local nc  = c.next
+                        local nv = 0
+                        local ns = 0
+                        while nc do
+                            local c = characters[nc]
+                            if c then
+                                adapt(c,factor,baseheight,basedepth)
+                                nv = nv + 1
+                                nc = c.next
+                                if not nc then
+                                    local hv = c.hparts
+                                    if hv then
+                                        for i=1,#hv do
+                                            local c = characters[hv[i].glyph]
+                                            if c then
+                                                adapt(c,factor,baseheight,basedepth)
+                                                ns = ns + 1
+                                            end
+                                        end
+                                    end
+                                    break
+                                end
+                            else
+                                break
+                            end
+                        end
+                        if trace_tweaking then
+                            report_tweak("adapting extensible (%i sizes, %i parts) %U",k,nv,ns)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    function mathtweaks.accentdimensions(target,original,parameters)
+        local list = parameters.list or { "over", "under" }
+        if list then
+            local characters = target.characters
+            local baseheight = target.mathparameters.AccentBaseHeight or 0
+            local basedepth  = target.mathparameters.AccentBaseDepth  or 0
+            for k, v in sortedhash(list) do -- sort for tracing
+                local t = type(v)
+                if t == "string" then
+                    v = candidates[v]
+                    t = type(v)
+                end
+                if t == "table" then
+                    process(characters,v,baseheight,basedepth)
+                end
+            end
+        end
+    end
+
+end
+
+do
+
+ --  function mathtweaks.addrules(target,original,parameters)
+ --      local characters = target.characters
+ --      local height     = target.mathparameters.OverbarRuleThickness
+ --      local depth      = target.mathparameters.UnderbarRuleThickness
+ --      local width      = target.parameters.emwidth/2
+ --      local step       = 0.8 * width
+ --      characters[0x203E] = { -- over
+ --          width    = width,
+ --          height   = height,
+ --          depth    = 0,
+ --          unicode  = 0x203E,
+ --          commands = { { "rule", height, width } },
+ --          hparts   = {
+ --              { advance = width, ["end"] = step, glyph = 0x203E, start = 0 },
+ --              { advance = width, ["end"] = 0,    glyph = 0x203E, start = step, extender = 1 },
+ --          }
+ --      }
+ --      characters[0x0332] = { -- under
+ --          width    = width,
+ --          height   = 0,
+ --          depth    = depth,
+ --          yoffset  = -depth,
+ --          unicode  = 0x0332,
+ --          commands = { { "rule", height, width } },
+ --          hparts   = {
+ --              { advance = width, ["end"] = step, glyph = 0x0332, start = 0 },
+ --              { advance = width, ["end"] = 0,    glyph = 0x0332, start = step, extender = 1 },
+ --          }
+ --      }
+ --  end
+
+    function mathtweaks.addrules(target,original,parameters)
+        local characters = target.characters
+        local thickness  = target.mathparameters.OverbarRuleThickness
+        local width      = target.parameters.emwidth / 2
+        local step       = 0.8 * width
+        characters[0x203E] = { -- over
+            width    = width,
+            height   = thickness / 2,
+            depth    = thickness / 2,
+            yoffset  = - thickness / 2,
+            unicode  = 0x203E,
+            commands = { { "rule", thickness, width } },
+            hparts   = {
+                { advance = width, ["end"] = step, glyph = 0x203E, start = 0 },
+                { advance = width, ["end"] = 0,    glyph = 0x203E, start = step, extender = 1 },
+            }
+        }
+        --
+        characters[0x0332] = characters[0x203E]
+        --
+        -- lucida lacks them ...
+        --
+        local addprivate = fonts.helpers.addprivate
+        --
+        local half   = thickness / 2
+        local double = thickness * 2
+        --
+        if not characters[0x23B4] then
+            local tpiece = addprivate(target,"bracket-piece-top",{
+                width    = thickness,
+                height   = half,
+                depth    = double,
+                yoffset  = - double,
+                commands = { { "rule", thickness * 2.5, thickness } },
+            })
+            characters[0x23B4] = { -- over
+                width    = width,
+                height   = half,
+                depth    = double,
+                unicode  = 0x23B4,
+                commands = { { "rule", thickness, width } },
+                hparts   = {
+                    { advance = thickness, glyph = tpiece, ["end"] = 0,    start = half },
+                    { advance = width,     glyph = 0x203E, ["end"] = step, start = step, extender = 1 },
+                    { advance = thickness, glyph = tpiece, ["end"] = half, start = 0 },
+                }
+            }
+        end
+        if not characters[0x23B5] then
+            local bpiece = addprivate(target,"bracket-piece-bottom",{
+                width    = thickness,
+                height   = double,
+                depth    = half,
+                yoffset  = - half,
+                commands = { { "rule", thickness * 2.5, thickness } },
+            })
+            characters[0x23B5] = { -- over
+                width    = width,
+                height   = double,
+                depth    = half,
+                unicode  = 0x23B5,
+                commands = { { "rule", thickness, width } },
+                hparts   = {
+                    { advance = thickness, glyph = bpiece, ["end"] = 0,    start = half },
+                    { advance = width,     glyph = 0x203E, ["end"] = step, start = step, extender = 1 },
+                    { advance = thickness, glyph = bpiece, ["end"] = half, start = 0 },
+                }
+            }
+        end
+    end
+
+end
+
+function mathtweaks.action(target,original,parameters)
+    local action = parameters.action
+    if type(action) == "function" then
+        action(target,original,parameters)
+    end
+end
+
+do
+
+    local list = {
+        { 0x00A0, "s", 1         }, -- nbsp
+        { 0x2000, "q", 1/2       }, -- enquad
+        { 0x2001, "q", 1         }, -- emquad
+        { 0x2002, "q", 1/2       }, -- enspace
+        { 0x2003, "q", 1         }, -- emspace
+        { 0x2004, "q", 1/3       }, -- threeperemspace
+        { 0x2005, "q", 1/4       }, -- fourperemspace
+        { 0x2006, "q", 1/6       }, -- sixperemspace
+        { 0x2007, "c", byte('0') }, -- figurespace
+        { 0x2008, "c", byte('.') }, -- punctuationspace
+        { 0x2009, "q", 1/8       }, -- breakablethinspace
+        { 0x200A, "q", 1/8       }, -- hairspace
+        { 0x200B, "q", 0         }, -- zerowidthspace
+        { 0x202F, "q", 1/8       }, -- narrownobreakspace
+        { 0x205F, "s", 1/2       }, -- math thinspace
+    }
+
+    function mathtweaks.checkspacing(target,original,parameters)
+        local characters = target.characters
+        local parameters = target.parameters
+        for i=1,#list do
+            local entry   = list[i]
+            local unicode = entry[1]
+            local data    = characters[unicode]
+            if not data then
+                local method   = entry[2]
+                local fraction = entry[3]
+                local width    = 0
+                if how == "c" then
+                    width = characters[fraction].width  -- char
+                elseif how == "s" then
+                    width = fraction * parameters.space -- space
+                else
+                    width = fraction * parameters.quad  -- quad
+                end
+                if trace_tweaking then
+                    report_tweak("setting width of %U to %p",target,original,unicode,width)
+                end
+                characters[unicode] = {
+                    width    = width,
+                 -- advance  = width,
+                    unicode  = unicode,
+                    commands = {
+                     -- { "slot", 0, 32 },
+                    },
+                }
+            end
+        end
+    end
+
+end
+
+do
+
+    local list = {
+        0x221A,
+    }
+
+    local function fix(target,original,characters,unicode)
+        local data = characters[unicode]
+        if data then
+            local height = data.height or 0
+            local depth  = data.depth or 0
+            if depth > height then
+                if trace_tweaking then
+                    report_tweak("swapping height and depth of radical %U",target,original,unicode)
+                end
+                data.height  = depth
+                data.depth   = height
+                data.yoffset = depth - height
+            end
+            local small = data.smaller
+            if small then
+                fix(target,original,characters,small)
+            end
+        end
+    end
+
+    function mathtweaks.fixradicals(target,original,parameters)
+        local characters = target.characters
+        for i=1,#list do
+            local unicode = list[i]
+            fix(target,original,characters,unicode)
+        end
+    end
+
+end
+
+do
+
+    local list = { 0x2061, 0x2062, 0x2063, 0x2064 }
+
+    function mathtweaks.wipecues(target,original,parameters)
+        local characters = target.characters
+        local tobewiped  = parameters.list or list
+        for i=1,#tobewiped do
+            local unicode = tobewiped[i]
+            characters[unicode] = {
+                width   = 0,
+                height  = 0,
+                depth   = 0,
+                unicode = unicode,
+            }
+            if trace_tweaking then
+                report_tweak("character %U has been wiped",unicode)
+            end
+        end
+    end
+
+end
+
+do
+
+    -- For Ton, who needs the high minus and plus for calculator signs in Dutch
+    -- school math books.
+
+    local list = {
+        { 0x207A, 0x002B, true  },
+        { 0x207B, 0x2212, true  },
+        { 0x208A, 0x002B, false },
+        { 0x208B, 0x2212, false },
+    }
+
+    local function add(target,original,characters,unicode,template,super,baseheight,scale)
+        if not characters[unicode] then
+            local origdata = characters[template]
+            if origdata then
+                local width  = scale * (origdata.width  or 0)
+                local height = scale * (origdata.height or 0)
+                local depth  = scale * (origdata.depth  or 0)
+                local half   = - (height + depth) / 2
+                local offset = super and baseheight/2 or -baseheight/4
+                characters[unicode] = {
+                    width    = width,
+                    height   = height + offset,
+                    depth    = depth  - offset,
+                    unicode  = unicode,
+                    commands = {
+                        { "offset", 0, offset, template, scale, scale }
+                    },
+                }
+                if trace_tweaking then
+                    report_tweak("adding script %U scaled %0.3f",target,original,unicode,scale)
+                end
+                -- no need for smaller
+            end
+        end
+    end
+
+    function mathtweaks.addscripts(target,original,parameters)
+        local characters = target.characters
+        local baseheight = target.mathparameters.AccentBaseHeight
+        local scaledown  = parameters.scale or target.mathparameters.ScriptScriptPercentScaleDown / 100
+        for i=1,#list do
+            local entry = list[i]
+            if entry then
+                add(target,original,characters,entry[1],entry[2],entry[3],baseheight,scaledown)
+            end
+        end
+    end
+
+end
+
+-- do
+--
+--     local list = {
+--         { 0x00AF, 1 },
+--     }
+--
+--     local minint = -2147483647 - 1
+--
+--     local function fix(target,original,targetcharacters,unicode,factor)
+--         local chardata = targetcharacters[unicode]
+--         if chardata and factor then
+--             local accent = chardata.topaccent
+--             if not accent then
+--                 local width  = chardata.width or 0
+--                 local accent = (tonumber(factor) and factor * width) or (factor and minint)
+--                 chardata.topaccent = accent
+--                 if trace_tweaking then
+--                     report_tweak("fixing accent %U",target,original,unicode)
+--                 end
+--             end
+--         end
+--     end
+--
+--     function mathtweaks.fixaccents(target,original,parameters)
+--         local targetcharacters = target.characters
+--         for i=1,#list do
+--             local entry = list[i]
+--             if entry then
+--                 fix(target,original,targetcharacters,entry[1],entry[2])
+--             end
+--         end
+--     end
+--
+-- end
+
+do
+
+    local reported = { }
+
+    function mathtweaks.version(target,original,parameters)
+        local metadata = original.shared.rawdata.metadata
+        if metadata then
+            local version = string.strip(metadata.version or "") -- some have trailing spaces
+            if version then
+                local expected = parameters.expected
+                local fontname = metadata.fontname or false
+                local message  = parameters.message
+             -- version = tonumber(string.match(version,"%d+.%d+"))
+                if version ~= expected and not reported[fontname] then
+                    report_tweak("version %a found, version %a expected",target,original,version,expected)
+                elseif trace_tweaking then
+                    report_tweak("version %a found",target,original,version)
+                end
+                if message and message ~= "" and not reported[fontname] then
+                    report_tweak()
+                    report_tweak("%s",target,original,message)
+                    report_tweak()
+                end
+                reported[fontname] = true
+            end
+        end
+    end
+
+end
+
+local apply_tweaks = true
+
+directives.register("math.applytweaks", function(v)
+    apply_tweaks = v;
+end)
+
+local function applytweaks(when,target,original)
+    if apply_tweaks then
+        local goodies = original.goodies
+        if goodies then
+            for i=1,#goodies do
+                local goodie = goodies[i]
+                local mathematics = goodie.mathematics
+                local tweaks = mathematics and mathematics.tweaks
+                if type(tweaks) == "table" then
+                    tweaks = tweaks[when]
+                    if type(tweaks) == "table" then
+                        if trace_defining then
+                            report_math("tweaking math of %a @ %p (%s)",target.properties.fullname,target.parameters.size,when)
+                        end
+                        for i=1,#tweaks do
+                            local tweak  = tweaks[i]
+                            local tvalue = type(tweak)
+                            if type(tweak) == "table" then
+                                local action = mathtweaks[tweak.tweak or ""]
+                                if action then
+                                    action(target,original,tweak)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    else
+        report_math("not tweaking math of %a @ %p (%s)",target.properties.fullname,target.parameters.size,when)
+    end
+end
+
+function mathematics.tweakbeforecopyingfont(target,original)
+    local mathparameters = target.mathparameters -- why not hasmath
+    if mathparameters then
+        applytweaks("beforecopying",target,original)
+    end
+end
+
+function mathematics.tweakaftercopyingfont(target,original)
+    local mathparameters = target.mathparameters -- why not hasmath
+    if mathparameters then
+        applytweaks("aftercopying",target,original)
+    end
+end
+
+sequencers.appendaction("mathparameters","system","mathematics.overloadparameters")
+sequencers.appendaction("mathparameters","system","mathematics.scaleparameters")
+sequencers.appendaction("mathparameters","system","mathematics.checkaccentbaseheight")  -- should go in lfg instead
+----------.appendaction("mathparameters","system","mathematics.checkprivateparameters") -- after scaling !
+
+sequencers.appendaction("beforecopyingcharacters","system","mathematics.tweakbeforecopyingfont")
+sequencers.appendaction("aftercopyingcharacters", "system","mathematics.tweakaftercopyingfont")
+
+-- no, it's a feature now (see good-mth):
+--
+-- sequencers.appendaction("aftercopyingcharacters", "system","mathematics.overloaddimensions")
+
+-- helpers
+
+local getfontoffamily = tex.getfontoffamily
+
+local fontcharacters  = fonts.hashes.characters
+local chardata        = characters.data
+local extensibles     = mathematics.extensibles
+
+-- we use numbers at the tex end (otherwise we could stick to chars)
+
+local e_left       = extensibles.left
+local e_right      = extensibles.right
+local e_horizontal = extensibles.horizontal
+local e_mixed      = extensibles.mixed
+local e_unknown    = extensibles.unknown
+
+local unknown      = { e_unknown, false, false }
+
+local function extensiblecode(font,unicode)
+    local characters = fontcharacters[font]
+    local character = characters[unicode]
+    if not character then
+        return unknown
+    end
+    local first = character.next
+    local code = unicode
+    local next = first
+    while next do
+        code = next
+        character = characters[next]
+        next = character.next
+    end
+    local char = chardata[unicode]
+    if not char then
+        return unknown
+    end
+    if character.hparts then
+        if character.vparts then
+            return { e_mixed, code, character }
+        else
+            local m = char.mathextensible
+            local e = m and extensibles[m]
+            return e and { e, code, character } or unknown
+        end
+    elseif character.vparts then
+        local m = char.mathextensible
+        local e = m and extensibles[m]
+        return e and { e, code, character } or unknown
+    elseif first then
+        -- assume accent (they seldom stretch .. sizes)
+        local m = char.mathextensible or char.mathstretch
+        local e = m and extensibles[m]
+        return e and { e, code, character } or unknown
+    else
+        return unknown
+    end
+end
+
+setmetatableindex(extensibles,function(extensibles,font)
+    local codes = { }
+    setmetatableindex(codes, function(codes,unicode)
+        local status = extensiblecode(font,unicode)
+        codes[unicode] = status
+        return status
+    end)
+    extensibles[font] = codes
+    return codes
+end)
+
+local function extensiblecode(family,unicode)
+    return extensibles[getfontoffamily(family or 0)][unicode][1]
+end
+
+-- left       : [head] ...
+-- right      : ... [head]
+-- horizontal : [head] ... [head]
+--
+-- abs(right["start"] - right["end"]) | right.advance | characters[right.glyph].width
+
+local function horizontalcode(family,unicode)
+    local font    = getfontoffamily(family or 0)
+    local data    = extensibles[font][unicode]
+    local kind    = data[1]
+    local loffset = 0
+    local roffset = 0
+    if kind == e_left then
+        local charlist = data[3].hparts
+        if charlist then
+            local left = charlist[1]
+            loffset = abs((left["start"] or 0) - (left["end"] or 0))
+        end
+    elseif kind == e_right then
+        local charlist = data[3].hparts
+        if charlist then
+            local right = charlist[#charlist]
+            roffset = abs((right["start"] or 0) - (right["end"] or 0))
+        end
+     elseif kind == e_horizontal then
+        local charlist = data[3].hparts
+        if charlist then
+            local left  = charlist[1]
+            local right = charlist[#charlist]
+            loffset = abs((left ["start"] or 0) - (left ["end"] or 0))
+            roffset = abs((right["start"] or 0) - (right["end"] or 0))
+        end
+    end
+    return kind, loffset, roffset
+end
+
+mathematics.extensiblecode = extensiblecode
+mathematics.horizontalcode = horizontalcode
+
+interfaces.implement { -- can be public with two times "integerargument"
+    name      = "extensiblecode",
+    arguments = { "integer", "integer" },
+    actions   = { extensiblecode, context }
+}
+
+interfaces.implement { -- can be public with two times "integerargument"
+    name      = "horizontalcode",
+    arguments = { "integer", "integer" },
+    actions   = function(family,unicode)
+        local kind, loffset, roffset = horizontalcode(family,unicode)
+        texsetdimen("scratchleftoffset", loffset)
+        texsetdimen("scratchrightoffset",roffset)
+        context(kind)
+    end
+}
+
+local stack = { }
+
+function mathematics.registerfallbackid(n,id,name)
+    if trace_collecting then
+        report_math("resolved fallback font %i, name %a, id %a, used %a",
+            n,name,id,fontproperties[id].fontname)
+    end
+    stack[#stack][n] = id
+end
+
+interfaces.implement { -- will be shared with text
+    name      = "registerfontfallbackid",
+    arguments = { "integer", "integer", "string" },
+    actions   = mathematics.registerfallbackid,
+}
+
+function mathematics.resolvefallbacks(target,specification,fallbacks)
+    local definitions = fonts.collections.definitions[fallbacks]
+    if definitions then
+        local size = specification.size -- target.size
+        local list = { }
+        insert(stack,list)
+        context.pushcatcodes("prt") -- context.unprotect()
+        for i=1,#definitions do
+            local definition = definitions[i]
+            local name       = definition.font
+            local features   = definition.features or ""
+            local size       = size * (definition.rscale or 1)
+-- compact: size = 655360
+            context.font_fallbacks_register_math(i,name,features,size)
+            if trace_collecting then
+                report_math("registering fallback font %i, name %a, size %a, features %a",i,name,size,features)
+            end
+        end
+        context.popcatcodes()
+    end
+end
+
+function mathematics.finishfallbacks(target,specification,fallbacks)
+    local list = remove(stack)
+    if list and #list > 0 then
+        local definitions = fonts.collections.definitions[fallbacks]
+        if definitions and #definitions > 0 then
+            if trace_collecting then
+                report_math("adding fallback characters to font %a",specification.hash)
+            end
+            local definedfont = fonts.definers.internal
+            local copiedglyph = fonts.handlers.vf.math.copy_glyph
+            local fonts       = target.fonts
+            local size        = specification.size -- target.size
+            local characters  = target.characters
+-- compact: size = 655360
+            if not fonts then
+                fonts = { }
+                target.fonts = fonts
+            end
+            if #fonts == 0 then
+                fonts[1] = { id = 0, size = size } -- self, will be resolved later
+            end
+            local done = { }
+            for i=1,#definitions do
+                local definition = definitions[i]
+                local name   = definition.font
+                local start  = definition.start
+                local stop   = definition.stop
+                local gaps   = definition.gaps
+                local check  = definition.check
+                local force  = definition.force
+                local rscale = definition.rscale or 1
+                local offset = definition.offset or start
+                local id     = list[i]
+                if id then
+                    local index  = #fonts + 1
+                    fonts[index] = { id = id, size = size }
+                    local chars  = fontchars[id]
+                    local function remap(unic,unicode,gap)
+                        if check and not chars[unicode] then
+                            return
+                        end
+                        if force or (not done[unic] and not characters[unic]) then
+                            if trace_collecting then
+                                report_math("replacing math character %C by %C using vector %a and font id %a for %a%s%s",
+                                    unic,unicode,fallbacks,id,fontproperties[id].fontname,check and ", checked",gap and ", gap plugged")
+                            end
+                            characters[unic] = copiedglyph(target,characters,chars,unicode,index)
+                            done[unic] = true
+                        end
+                    end
+                    local step = offset - start
+                    for unicode = start, stop do
+                        remap(unicode + step,unicode,false)
+                    end
+                    if gaps then
+                        for unic, unicode in next, gaps do
+                            remap(unic,unicode,true)
+                            remap(unicode,unicode,true)
+                        end
+                    end
+                end
+            end
+        elseif trace_collecting then
+            report_math("no fallback characters added to font %a",specification.hash)
+        end
+    end
+end

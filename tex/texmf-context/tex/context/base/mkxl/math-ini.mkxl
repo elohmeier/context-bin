@@ -1,0 +1,3849 @@
+%D \module
+%D   [       file=math-ini,
+%D        version=2008.01.02,
+%D          title=\CONTEXT\ Math Macros,
+%D       subtitle=Initializations,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Math Macros / Initializations}
+
+%D This module provides namespaces for math fonts, thereby permitting mixed usage of
+%D math fonts. Although not strictly needed, we also provide a family name mapping
+%D mechanism as used in the (original) AMS math definition files, but here these
+%D names can recursively be remapped and if needed, dynamically be changed. We've
+%D tried to minimize the number of definition commands and use plain \TEX\
+%D definitions as fallback. We've tried to follow a couple of conventions from plain
+%D and AMS math in order to achieve backward compatinility. We also kept an eye on
+%D future usage of these modules in the perspective of MathML and unicode fonts. In
+%D the meantime much has been dropped in favour of better alternatives.
+
+%D There is a subtle issue with grouping: the \type {\begingroup} method will not
+%D restore a changed mathstyle so best avoid that one. However, there are cases where
+%D we really need to use such grouping. We now have \type {\beginmathgroup} etc.
+
+%D Musical timestamp for the April 2022 math (inline) snapping sub activity: eNerd⁴
+%D Time Capsule 2020 a.k.a. Farewell Party for Normalcy (DSD on the squeezebox with
+%D a proper DAC connected but it can hardly keep up which also counts for me with MS
+%D testing faster than I can provide variants (www.youtube.com/watch?v=xzQCqAJNOSM).
+
+%D After an extremely short discussion MS and HH decided that we will not support
+%D \quote { BS ISO 80000-2:2009} because it doesn't comply to the CMS quality
+%D standards and is BS anyway.
+
+\unprotect
+
+%D We move these definitions into the format:
+
+\registerctxluafile{math-ini}{autosuffix}
+\registerctxluafile{math-dim}{autosuffix}
+\registerctxluafile{math-act}{autosuffix}
+\registerctxluafile{math-ext}{}
+\registerctxluafile{math-vfu}{autosuffix}
+\registerctxluafile{math-ttv}{}
+\registerctxluafile{math-map}{autosuffix}
+\registerctxluafile{math-ren}{}
+\registerctxluafile{math-noa}{autosuffix}
+\registerctxluafile{math-tag}{autosuffix}
+\registerctxluafile{math-fbk}{autosuffix}
+\registerctxluafile{math-dir}{}
+\registerctxluafile{math-spa}{autosuffix}
+\registerctxluafile{math-fnt}{autosuffix}
+\registerctxluafile{math-pre}{autosuffix}
+
+%D Basic spacing:
+
+\mathfencesmode \plusone % unpack
+
+% These need to be set because otherwise the engine will not honor some font
+% properties. It also permits tracing. These might become engine defaults. As a
+% consequence we no longer check for traditional fonts but one can use font control
+% options.
+
+% \mathcontrolmode\plusone
+
+\mathfontcontrol\numexpr
+    \zerocount
+   +\overrulemathcontrolcode                % let the node family/font win over current family/font
+   +\underrulemathcontrolcode               % idem
+   +\radicalrulemathcontrolcode             % idem
+   +\fractionrulemathcontrolcode            % idem
+   +\accentskewhalfmathcontrolcode          % fall back to half width skewing when no topaccent is given
+   +\accentskewapplymathcontrolcode         % use topaccent, otherwise use skew char
+ % + checkligatureandkernmathcontrolcode    % old fonts
+   +\applyverticalitalickernmathcontrolcode % best do this indeed
+   +\applyordinaryitalickernmathcontrolcode % best do this indeed
+ % +\applycharitalickernmathcontrolcode     % not done
+ % +\reboxcharitalickernmathcontrolcode     % old code path
+   +\applyboxeditalickernmathcontrolcode    % best do this indeed
+   +\staircasekernmathcontrolcode           % use these when set
+   +\applytextitalickernmathcontrolcode
+   +\checktextitalickernmathcontrolcode
+ % +\checkspaceitalickernmathcontrolcode    % old code path
+   +\applyscriptitalickernmathcontrolcode
+   +\italicshapekernmathcontrolcode         % instead of adding pre italic to the shift, inject a kern
+\relax
+
+% \mathpenaltiesmode\plusone
+
+% These are frozen values because otherwise we need to sunc them when the predefined
+% muskip (internal) registers are changed.
+
+\immutable\mugluespecdef\defaultthickermuskip    7mu plus 5.0mu
+\immutable\mugluespecdef\defaultthickmuskip      5mu plus 5mu
+\immutable\mugluespecdef\defaultmedmuskip        4mu plus 2mu minus 4mu
+\immutable\mugluespecdef\defaultthinmuskip       3mu
+\immutable\mugluespecdef\defaulttinymuskip       1mu
+
+\immutable\mugluespecdef\halfthickmuskip         2.5mu plus 2.5mu
+\immutable\mugluespecdef\halfmedmuskip           2.0mu plus 1.0mu minus 2.0mu
+\immutable\mugluespecdef\halfthinmuskip          1.5mu
+\immutable\mugluespecdef\halftinymuskip          0.5mu
+
+\immutable\mugluespecdef\hairmuskip              .15mu
+
+\immutable\integerdef   \defaultrelpenalty       500
+\immutable\integerdef   \defaultbinoppenalty     700
+\immutable\integerdef   \defaultprerelpenalty   -100
+\immutable\integerdef   \defaultprebinoppenalty -100
+
+\newmuskip\thickermuskip \thickermuskip \defaultthickermuskip
+
+% more friendly in setups:
+
+\setnewconstant\mathordinarycode      \mathclassvalue ordinary         \aliased\let\mathordcode  \mathordinarycode
+\setnewconstant\mathoperatorcode      \mathclassvalue operator         \aliased\let\mathopcode   \mathoperatorcode
+\setnewconstant\mathbinarycode        \mathclassvalue binary           \aliased\let\mathbincode  \mathbinarycode
+\setnewconstant\mathrelationcode      \mathclassvalue relation         \aliased\let\mathrelcode  \mathrelationcode
+\setnewconstant\mathopencode          \mathclassvalue open
+\setnewconstant\mathclosecode         \mathclassvalue close
+\setnewconstant\mathpunctuationcode   \mathclassvalue punctuation      \aliased\let\mathpunctcode\mathpunctuationcode
+\setnewconstant\mathinnercode         \mathclassvalue inner
+\setnewconstant\mathovercode          \mathclassvalue over
+\setnewconstant\mathundercode         \mathclassvalue under
+\setnewconstant\mathfractioncode      \mathclassvalue fraction
+\setnewconstant\mathradicalcode       \mathclassvalue radical
+\setnewconstant\mathmiddlecode        \mathclassvalue middle
+\setnewconstant\mathaccentcode        \mathclassvalue accent
+\setnewconstant\mathfencedcode        \mathclassvalue fenced
+\setnewconstant\mathghostcode         \mathclassvalue ghost
+\setnewconstant\mathvariablecode      \mathclassvalue variable
+\setnewconstant\mathactivecode        \mathclassvalue active
+\setnewconstant\mathvcentercode       \mathclassvalue vcenter
+\setnewconstant\mathimaginarycode     \mathclassvalue imaginary
+\setnewconstant\mathdifferentialcode  \mathclassvalue differential
+\setnewconstant\mathexponentialcode   \mathclassvalue exponential
+\setnewconstant\mathfunctioncode      \mathclassvalue function
+\setnewconstant\mathdigitcode         \mathclassvalue digit
+\setnewconstant\mathexplicitcode      \mathclassvalue explicit
+\setnewconstant\mathdivisioncode      \mathclassvalue division
+\setnewconstant\mathfactorialcode     \mathclassvalue factorial
+\setnewconstant\mathwrappedcode       \mathclassvalue wrapped
+\setnewconstant\mathconstructcode     \mathclassvalue construct
+\setnewconstant\mathdimensioncode     \mathclassvalue dimension
+
+\setnewconstant\mathbegincode         \mathclassvalue begin
+\setnewconstant\mathendcode           \mathclassvalue end
+
+%setnewconstant\mathtopaccentcode     \mathclassvalue topaccent % these are private and above 31
+%setnewconstant\mathbotaccentcode     \mathclassvalue botaccent % these are private and above 31
+%setnewconstant\mathdelimitercode     \mathclassvalue delimiter % these are private and above 31
+%setnewconstant\mathrootcode          \mathclassvalue root      % these are private and above 31
+%setnewconstant\mathprimecode         \mathclassvalue prime     % these are private and above 31
+
+%letmathspacing \mathimaginarycode    \mathordinarycode \mathordinarycode \mathordinarycode \mathordinarycode
+%letmathspacing \mathdifferentialcode \mathordinarycode \mathordinarycode \mathordinarycode \mathordinarycode
+%letmathspacing \mathexponentialcode  \mathordinarycode \mathordinarycode \mathordinarycode \mathordinarycode
+%letmathspacing \mathfunctioncode     \mathordinarycode \mathordinarycode \mathordinarycode \mathordinarycode
+%letmathspacing \mathdigitcode        \mathordinarycode \mathordinarycode \mathordinarycode \mathordinarycode
+
+\copymathspacing \mathimaginarycode    \mathordinarycode
+\copymathspacing \mathdifferentialcode \mathordinarycode
+\copymathspacing \mathfactorialcode    \mathordinarycode
+\copymathspacing \mathexponentialcode  \mathordinarycode
+\copymathspacing \mathdigitcode        \mathordinarycode
+\copymathspacing \mathfunctioncode     \mathoperatorcode
+\copymathspacing \mathconstructcode    \mathinnercode
+\copymathspacing \mathwrappedcode      \mathfractioncode
+
+\setnewconstant\mathlimopcode \plusone
+\setnewconstant\mathnolopcode \plusone
+
+% \m{m^2/x__3}
+
+\setmathoptions\mathdivisioncode\numexpr
+    \nopreslackclassoptioncode
+   +\nopostslackclassoptioncode
+   +\lefttopkernclassoptioncode
+ % +\righttopkernclassoptioncode
+ % +\leftbottomkernclassoptioncode
+   +\rightbottomkernclassoptioncode
+\relax
+
+% obsolete
+
+\setnewconstant\mathboxcode     \zerocount
+\setnewconstant\mathchoicecode  \zerocount
+\setnewconstant\mathalphacode   \zerocount
+\setnewconstant\mathnothingcode \zerocount
+
+%D At some point we will drop these in the \LUAMETATEX\ engine becuase we have many
+%D more options there.
+
+\pushoverloadmode
+    \untraced\permanent\protected\def\binoppenalty   {\setmathpostpenalty\mathbinarycode}
+    \untraced\permanent\protected\def\prebinoppenalty{\setmathprepenalty \mathbinarycode}
+    \untraced\permanent\protected\def\relpenalty     {\setmathpostpenalty\mathrelationcode}
+    \untraced\permanent\protected\def\prerelpenalty  {\setmathprepenalty \mathrelationcode}
+\popoverloadmode
+
+%D These verbose commands are obsolete because there are plenty more classes in
+%D \LMTX\ than in \MKIV.
+
+\permanent\protected\def\ordordspacing      {\setmathspacing \mathordinarycode    \mathordinarycode   }
+\permanent\protected\def\ordopspacing       {\setmathspacing \mathordinarycode    \mathoperatorcode   }
+\permanent\protected\def\ordbinspacing      {\setmathspacing \mathordinarycode    \mathbinarycode     }
+\permanent\protected\def\ordrelspacing      {\setmathspacing \mathordinarycode    \mathrelationcode   }
+\permanent\protected\def\ordopenspacing     {\setmathspacing \mathordinarycode    \mathopencode       }
+\permanent\protected\def\ordclosespacing    {\setmathspacing \mathordinarycode    \mathclosecode      }
+\permanent\protected\def\ordpunctspacing    {\setmathspacing \mathordinarycode    \mathpunctuationcode}
+\permanent\protected\def\ordinnerspacing    {\setmathspacing \mathordinarycode    \mathinnercode      }
+\permanent\protected\def\ordfracspacing     {\setmathspacing \mathordinarycode    \mathfractioncode   }
+\permanent\protected\def\ordradspacing      {\setmathspacing \mathordinarycode    \mathradicalcode    }
+\permanent\protected\def\ordmiddlespacing   {\setmathspacing \mathordinarycode    \mathmiddlecode     }
+\permanent\protected\def\ordaccentspacing   {\setmathspacing \mathordinarycode    \mathaccentcode     }
+
+\permanent\protected\def\opordspacing       {\setmathspacing \mathoperatorcode    \mathordinarycode   }
+\permanent\protected\def\opopspacing        {\setmathspacing \mathoperatorcode    \mathoperatorcode   }
+\permanent\protected\def\opbinspacing       {\setmathspacing \mathoperatorcode    \mathbinarycode     }
+\permanent\protected\def\oprelspacing       {\setmathspacing \mathoperatorcode    \mathrelationcode   }
+\permanent\protected\def\opopenspacing      {\setmathspacing \mathoperatorcode    \mathopencode       }
+\permanent\protected\def\opclosespacing     {\setmathspacing \mathoperatorcode    \mathclosecode      }
+\permanent\protected\def\oppunctspacing     {\setmathspacing \mathoperatorcode    \mathpunctuationcode}
+\permanent\protected\def\opinnerspacing     {\setmathspacing \mathoperatorcode    \mathinnercode      }
+\permanent\protected\def\opfracspacing      {\setmathspacing \mathoperatorcode    \mathfractioncode   }
+\permanent\protected\def\opradspacing       {\setmathspacing \mathoperatorcode    \mathradicalcode    }
+\permanent\protected\def\opmiddlespacing    {\setmathspacing \mathoperatorcode    \mathmiddlecode     }
+\permanent\protected\def\opaccentspacing    {\setmathspacing \mathoperatorcode    \mathaccentcode     }
+
+\permanent\protected\def\binordspacing      {\setmathspacing \mathbinarycode      \mathordinarycode   }
+\permanent\protected\def\binopspacing       {\setmathspacing \mathbinarycode      \mathoperatorcode   }
+\permanent\protected\def\binbinspacing      {\setmathspacing \mathbinarycode      \mathbinarycode     }
+\permanent\protected\def\binrelspacing      {\setmathspacing \mathbinarycode      \mathrelationcode   }
+\permanent\protected\def\binopenspacing     {\setmathspacing \mathbinarycode      \mathopencode       }
+\permanent\protected\def\binclosespacing    {\setmathspacing \mathbinarycode      \mathclosecode      }
+\permanent\protected\def\binpunctspacing    {\setmathspacing \mathbinarycode      \mathpunctuationcode}
+\permanent\protected\def\bininnerspacing    {\setmathspacing \mathbinarycode      \mathinnercode      }
+\permanent\protected\def\binfracspacing     {\setmathspacing \mathbinarycode      \mathfractioncode   }
+\permanent\protected\def\binradspacing      {\setmathspacing \mathbinarycode      \mathradicalcode    }
+\permanent\protected\def\binmiddlespacing   {\setmathspacing \mathbinarycode      \mathmiddlecode     }
+\permanent\protected\def\binaccentspacing   {\setmathspacing \mathbinarycode      \mathaccentcode     }
+
+\permanent\protected\def\relordspacing      {\setmathspacing \mathrelationcode    \mathordinarycode   }
+\permanent\protected\def\relopspacing       {\setmathspacing \mathrelationcode    \mathoperatorcode   }
+\permanent\protected\def\relbinspacing      {\setmathspacing \mathrelationcode    \mathbinarycode     }
+\permanent\protected\def\relrelspacing      {\setmathspacing \mathrelationcode    \mathrelationcode   }
+\permanent\protected\def\relopenspacing     {\setmathspacing \mathrelationcode    \mathopencode       }
+\permanent\protected\def\relclosespacing    {\setmathspacing \mathrelationcode    \mathclosecode      }
+\permanent\protected\def\relpunctspacing    {\setmathspacing \mathrelationcode    \mathpunctuationcode}
+\permanent\protected\def\relinnerspacing    {\setmathspacing \mathrelationcode    \mathinnercode      }
+\permanent\protected\def\relfracspacing     {\setmathspacing \mathrelationcode    \mathfractioncode   }
+\permanent\protected\def\relradspacing      {\setmathspacing \mathrelationcode    \mathradicalcode    }
+\permanent\protected\def\relmiddlespacing   {\setmathspacing \mathrelationcode    \mathmiddlecode     }
+\permanent\protected\def\relaccentspacing   {\setmathspacing \mathrelationcode    \mathaccentcode     }
+
+\permanent\protected\def\openordspacing     {\setmathspacing \mathopencode        \mathordinarycode   }
+\permanent\protected\def\openopspacing      {\setmathspacing \mathopencode        \mathoperatorcode   }
+\permanent\protected\def\openbinspacing     {\setmathspacing \mathopencode        \mathbinarycode     }
+\permanent\protected\def\openrelspacing     {\setmathspacing \mathopencode        \mathrelationcode   }
+\permanent\protected\def\openopenspacing    {\setmathspacing \mathopencode        \mathopencode       }
+\permanent\protected\def\openclosespacing   {\setmathspacing \mathopencode        \mathclosecode      }
+\permanent\protected\def\openpunctspacing   {\setmathspacing \mathopencode        \mathpunctuationcode}
+\permanent\protected\def\openinnerspacing   {\setmathspacing \mathopencode        \mathinnercode      }
+\permanent\protected\def\openfracspacing    {\setmathspacing \mathopencode        \mathfractioncode   }
+\permanent\protected\def\openradspacing     {\setmathspacing \mathopencode        \mathradicalcode    }
+\permanent\protected\def\openmiddlespacing  {\setmathspacing \mathopencode        \mathmiddlecode     }
+\permanent\protected\def\openaccentspacing  {\setmathspacing \mathopencode        \mathaccentcode     }
+
+\permanent\protected\def\closeordspacing    {\setmathspacing \mathclosecode       \mathordinarycode   }
+\permanent\protected\def\closeopspacing     {\setmathspacing \mathclosecode       \mathoperatorcode   }
+\permanent\protected\def\closebinspacing    {\setmathspacing \mathclosecode       \mathbinarycode     }
+\permanent\protected\def\closerelspacing    {\setmathspacing \mathclosecode       \mathrelationcode   }
+\permanent\protected\def\closeopenspacing   {\setmathspacing \mathclosecode       \mathopencode       }
+\permanent\protected\def\closeclosespacing  {\setmathspacing \mathclosecode       \mathclosecode      }
+\permanent\protected\def\closepunctspacing  {\setmathspacing \mathclosecode       \mathpunctuationcode}
+\permanent\protected\def\closeinnerspacing  {\setmathspacing \mathclosecode       \mathinnercode      }
+\permanent\protected\def\closefracspacing   {\setmathspacing \mathclosecode       \mathfractioncode   }
+\permanent\protected\def\closeradspacing    {\setmathspacing \mathclosecode       \mathradicalcode    }
+\permanent\protected\def\closemiddlespacing {\setmathspacing \mathclosecode       \mathmiddlecode     }
+\permanent\protected\def\closeaccentspacing {\setmathspacing \mathclosecode       \mathaccentcode     }
+
+\permanent\protected\def\punctordspacing    {\setmathspacing \mathpunctuationcode \mathordinarycode   }
+\permanent\protected\def\punctopspacing     {\setmathspacing \mathpunctuationcode \mathoperatorcode   }
+\permanent\protected\def\punctbinspacing    {\setmathspacing \mathpunctuationcode \mathbinarycode     }
+\permanent\protected\def\punctrelspacing    {\setmathspacing \mathpunctuationcode \mathrelationcode   }
+\permanent\protected\def\punctopenspacing   {\setmathspacing \mathpunctuationcode \mathopencode       }
+\permanent\protected\def\punctclosespacing  {\setmathspacing \mathpunctuationcode \mathclosecode      }
+\permanent\protected\def\punctpunctspacing  {\setmathspacing \mathpunctuationcode \mathpunctuationcode}
+\permanent\protected\def\punctinnerspacing  {\setmathspacing \mathpunctuationcode \mathinnercode      }
+\permanent\protected\def\punctfracspacing   {\setmathspacing \mathpunctuationcode \mathfractioncode   }
+\permanent\protected\def\punctradspacing    {\setmathspacing \mathpunctuationcode \mathradicalcode    }
+\permanent\protected\def\punctmiddlespacing {\setmathspacing \mathpunctuationcode \mathmiddlecode     }
+\permanent\protected\def\punctaccentspacing {\setmathspacing \mathpunctuationcode \mathaccentcode     }
+
+\permanent\protected\def\innerordspacing    {\setmathspacing \mathinnercode       \mathordinarycode   }
+\permanent\protected\def\inneropspacing     {\setmathspacing \mathinnercode       \mathoperatorcode   }
+\permanent\protected\def\innerbinspacing    {\setmathspacing \mathinnercode       \mathbinarycode     }
+\permanent\protected\def\innerrelspacing    {\setmathspacing \mathinnercode       \mathrelationcode   }
+\permanent\protected\def\inneropenspacing   {\setmathspacing \mathinnercode       \mathopencode       }
+\permanent\protected\def\innerclosespacing  {\setmathspacing \mathinnercode       \mathclosecode      }
+\permanent\protected\def\innerpunctspacing  {\setmathspacing \mathinnercode       \mathpunctuationcode}
+\permanent\protected\def\innerinnerspacing  {\setmathspacing \mathinnercode       \mathinnercode      }
+\permanent\protected\def\innerfracspacing   {\setmathspacing \mathinnercode       \mathfractioncode   }
+\permanent\protected\def\innerradspacing    {\setmathspacing \mathinnercode       \mathradicalcode    }
+\permanent\protected\def\innermiddlespacing {\setmathspacing \mathinnercode       \mathmiddlecode     }
+\permanent\protected\def\inneraccentspacing {\setmathspacing \mathinnercode       \mathaccentcode     }
+
+\permanent\protected\def\fracordspacing     {\setmathspacing \mathfractioncode    \mathordinarycode   }
+\permanent\protected\def\fracopspacing      {\setmathspacing \mathfractioncode    \mathoperatorcode   }
+\permanent\protected\def\fracbinspacing     {\setmathspacing \mathfractioncode    \mathbinarycode     }
+\permanent\protected\def\fracrelspacing     {\setmathspacing \mathfractioncode    \mathrelationcode   }
+\permanent\protected\def\fracopenspacing    {\setmathspacing \mathfractioncode    \mathopencode       }
+\permanent\protected\def\fracclosespacing   {\setmathspacing \mathfractioncode    \mathclosecode      }
+\permanent\protected\def\fracpunctspacing   {\setmathspacing \mathfractioncode    \mathpunctuationcode}
+\permanent\protected\def\fracinnerspacing   {\setmathspacing \mathfractioncode    \mathinnercode      }
+\permanent\protected\def\fracfracspacing    {\setmathspacing \mathfractioncode    \mathfractioncode   }
+\permanent\protected\def\fracradspacing     {\setmathspacing \mathfractioncode    \mathradicalcode    }
+\permanent\protected\def\fracmiddlespacing  {\setmathspacing \mathfractioncode    \mathmiddlecode     }
+\permanent\protected\def\fracaccentspacing  {\setmathspacing \mathfractioncode    \mathaccentcode     }
+
+\permanent\protected\def\radordspacing      {\setmathspacing \mathradicalcode     \mathordinarycode   }
+\permanent\protected\def\radopspacing       {\setmathspacing \mathradicalcode     \mathoperatorcode   }
+\permanent\protected\def\radbinspacing      {\setmathspacing \mathradicalcode     \mathbinarycode     }
+\permanent\protected\def\radrelspacing      {\setmathspacing \mathradicalcode     \mathrelationcode   }
+\permanent\protected\def\radopenspacing     {\setmathspacing \mathradicalcode     \mathopencode       }
+\permanent\protected\def\radclosespacing    {\setmathspacing \mathradicalcode     \mathclosecode      }
+\permanent\protected\def\radpunctspacing    {\setmathspacing \mathradicalcode     \mathpunctuationcode}
+\permanent\protected\def\radinnerspacing    {\setmathspacing \mathradicalcode     \mathinnercode      }
+\permanent\protected\def\radfracspacing     {\setmathspacing \mathradicalcode     \mathfractioncode   }
+\permanent\protected\def\radradspacing      {\setmathspacing \mathradicalcode     \mathradicalcode    }
+\permanent\protected\def\radmiddlespacing   {\setmathspacing \mathradicalcode     \mathmiddlecode     }
+\permanent\protected\def\radaccentspacing   {\setmathspacing \mathradicalcode     \mathaccentcode     }
+
+\permanent\protected\def\middleordspacing   {\setmathspacing \mathmiddlecode      \mathordinarycode   }
+\permanent\protected\def\middleopspacing    {\setmathspacing \mathmiddlecode      \mathoperatorcode   }
+\permanent\protected\def\middlebinspacing   {\setmathspacing \mathmiddlecode      \mathbinarycode     }
+\permanent\protected\def\middlerelspacing   {\setmathspacing \mathmiddlecode      \mathrelationcode   }
+\permanent\protected\def\middleopenspacing  {\setmathspacing \mathmiddlecode      \mathopencode       }
+\permanent\protected\def\middleclosespacing {\setmathspacing \mathmiddlecode      \mathclosecode      }
+\permanent\protected\def\middlepunctspacing {\setmathspacing \mathmiddlecode      \mathpunctuationcode}
+\permanent\protected\def\middleinnerspacing {\setmathspacing \mathmiddlecode      \mathinnercode      }
+\permanent\protected\def\middlefracspacing  {\setmathspacing \mathmiddlecode      \mathfractioncode   }
+\permanent\protected\def\middleradspacing   {\setmathspacing \mathmiddlecode      \mathradicalcode    }
+\permanent\protected\def\middlemiddlespacing{\setmathspacing \mathmiddlecode      \mathmiddlecode     }
+\permanent\protected\def\middleaccentspacing{\setmathspacing \mathmiddlecode      \mathaccentcode     }
+
+\permanent\protected\def\accentordspacing   {\setmathspacing \mathaccentcode      \mathordinarycode   }
+\permanent\protected\def\accentopspacing    {\setmathspacing \mathaccentcode      \mathoperatorcode   }
+\permanent\protected\def\accentbinspacing   {\setmathspacing \mathaccentcode      \mathbinarycode     }
+\permanent\protected\def\accentrelspacing   {\setmathspacing \mathaccentcode      \mathrelationcode   }
+\permanent\protected\def\accentopenspacing  {\setmathspacing \mathaccentcode      \mathopencode       }
+\permanent\protected\def\accentclosespacing {\setmathspacing \mathaccentcode      \mathclosecode      }
+\permanent\protected\def\accentpunctspacing {\setmathspacing \mathaccentcode      \mathpunctuationcode}
+\permanent\protected\def\accentinnerspacing {\setmathspacing \mathaccentcode      \mathinnercode      }
+\permanent\protected\def\accentfracspacing  {\setmathspacing \mathaccentcode      \mathfractioncode   }
+\permanent\protected\def\accentradspacing   {\setmathspacing \mathaccentcode      \mathradicalcode    }
+\permanent\protected\def\accentmiddlespacing{\setmathspacing \mathaccentcode      \mathmiddlecode     }
+\permanent\protected\def\accentaccentspacing{\setmathspacing \mathaccentcode      \mathaccentcode     }
+
+%D In the end Mikael and I prefer this but we need a high level interface:
+
+% \setmathignore\Umathspacebeforescript\plusone
+% \setmathignore\Umathspaceafterscript \plusone
+
+\setmathignore \Umathspacebeforescript\zerocount
+\setmathignore \Umathspaceafterscript \zerocount
+
+\mathslackmode \plusone
+
+\integerdef\defaultmathclassoptions\numexpr
+    \nopreslackclassoptioncode
+   +\nopostslackclassoptioncode
+ % +\lefttopkernclassoptioncode
+ % +\righttopkernclassoptioncode
+ % +\leftbottomkernclassoptioncode
+ % +\rightbottomkernclassoptioncode
+ % +\lookaheadforendclassoptioncode
+\relax
+
+\setmathoptions\mathbinarycode\numexpr
+    \defaultmathclassoptions
+   +\lookaheadforendclassoptioncode
+\relax
+
+\setmathoptions\mathoperatorcode   \defaultmathclassoptions
+\setmathoptions\mathrelationcode   \defaultmathclassoptions
+\setmathoptions\mathopencode       \defaultmathclassoptions
+\setmathoptions\mathclosecode      \defaultmathclassoptions
+\setmathoptions\mathpunctuationcode\defaultmathclassoptions
+\setmathoptions\mathfractioncode   \defaultmathclassoptions
+
+%D For now \unknown (todo: make it adapt to style but we're in text anyway)
+
+\permanent\protected\def\math_discretionary_plus {\discretionary class \mathbinarycode {$+$}{$+$}{$+$}}
+\permanent\protected\def\math_discretionary_minus{\discretionary class \mathbinarycode {$-$}{$-$}{$-$}}
+
+\newtoks\everymathdiscretionaries
+
+\appendtoks
+    \enforced\let\+\math_discretionary_plus
+    \enforced\let\-\math_discretionary_minus
+\to \everymathdiscretionaries
+
+\appendtoks
+    \ifconditional\c_math_discretionaries
+        \the\everymathdiscretionaries
+    \fi
+\to \everymathematics
+
+\setfalse\c_math_discretionaries
+
+\installtexexperiment
+  {mathematics.discretionaries}
+  {\settrue \c_math_discretionaries}
+  {\setfalse\c_math_discretionaries}
+
+%D This is moved here from supp-mat:
+
+\permanent\protected\def\dimension#1%
+  {\mathematics
+     {\mathatom
+        \s!leftclass  \mathdimensioncode
+        \s!rightclass \mathordinarycode
+      {\tf #1}}}
+
+\permanent\protected\def\nodimension#1%
+  {#1}
+
+%D A starter:
+%D
+%D \startbuffer
+%D \mathsurround    10pt
+%D \mathsurroundskip30pt
+%D x $x + \ruledhbox{$x$} + x$ x
+%D \stopbuffer
+%D
+%D \typebuffer
+%D
+%D \start \blank \getbuffer \blank \stop
+
+\newcount\mathnestinglevel
+
+\appendtoks
+    \advance\mathnestinglevel\plusone
+\to \everymathematics
+
+%D A few compatibility helpers:
+
+\permanent\def\Umathbotaccent{\Umathaccent \s!bottom }
+\permanent\def\Umathtopaccent{\Umathaccent \s!top    }
+\permanent\def\Umathaccents  {\Umathaccent \s!both   } % strange highlighting
+
+%D The attributes that we will use (todo: pack some into one but uglier code):
+
+\definesystemattribute[mathalphabet]   [public]
+\definesystemattribute[mathsize]       [public]
+\definesystemattribute[mathpunctuation][public]
+\definesystemattribute[mathgreek]      [public] % will become generic
+\definesystemattribute[mathalternate]  [public]
+\definesystemattribute[mathrendering]  [public]
+\definesystemattribute[mathcategory]   [public]
+\definesystemattribute[mathmode]       [public]
+\definesystemattribute[mathitalics]    [public]
+\definesystemattribute[mathkernpairs]  [public]
+\definesystemattribute[mathbidi]       [public]
+\definesystemattribute[mathdomain]     [public]
+\definesystemattribute[mathcollapsing] [public]
+\definesystemattribute[mathunstack]    [public]
+\definesystemattribute[mathvariant]    [public]
+
+\definesystemattribute[displaymath]    [public]
+
+% \mathflattenmode\numexpr
+%     \ordmathflattencode
+%    +\binmathflattencode
+%    +\relmathflattencode
+%    +\punctmathflattencode
+%    +\innermathflattencode
+% \relax
+
+\ifdefined\ordlimits\else
+    \let\ordlimits\Umathlimits % downward compatible
+\fi
+
+\appendtoks
+    \c_attr_mathmode\plusone
+\to \everydisplay
+
+\appendtoks
+    \c_attr_mathmode   \plusone
+    \c_attr_displaymath\plusone
+\to \everybeforedisplayformula
+
+% defined at lua end \permanent\protected\def\resetmathattributes{\resetmathattributes}
+
+% handy
+
+\newconditional\indisplaymath
+
+\appendtoks
+    \setfalse\indisplaymath
+\to \everymath
+
+\appendtoks
+    \settrue\indisplaymath
+\to \everydisplay
+
+\permanent\def\inlineordisplaymath{\ifconditional\indisplaymath\expandafter\secondoftwoarguments\else\expandafter\firstoftwoarguments\fi}
+
+\permanent\protected\def\forcedisplaymath
+  {\ifmmode
+     \displaystyle
+     \settrue\indisplaymath
+   \fi}
+
+\permanent\protected\def\forceinlinemath
+  {\ifmmode
+     \textstyle
+     \setfalse\indisplaymath
+   \fi}
+
+\permanent\protected\def\startforceddisplaymath
+  {\startimath
+   \displaystyle
+   \begingroup
+   \settrue\indisplaymath}
+
+\permanent\protected\def\stopforceddisplaymath
+  {\endgroup
+   \stopimath}
+
+\permanent\protected\def\startpickupmath % for the moment private
+  {\ifconditional\indisplaymath
+     \startforceddisplaymath
+     \enforced\let\stoppickupmath\stopforceddisplaymath
+   \else
+     \startimath
+     \enforced\let\stoppickupmath\stopimath
+   \fi}
+
+\aliased\let\stoppickupmath\relax
+
+% \protected\def\rawmathcharacter#1% slow but only for tracing
+%   {\begingroup
+%    \ifmmode
+%      \resetmathattributes\Uchar#1%
+%    \else
+%      \startimath\resetmathattributes\Uchar#1\stopimath
+%    \fi
+%    \endgroup}
+
+\permanent\protected\def\rawmathematics#1% slow but only for tracing
+  {\begingroup
+   \ifmmode
+     \resetmathattributes#1%
+   \else
+     \startimath\resetmathattributes#1\stopimath
+   \fi
+   \endgroup}
+
+%D Some measures (maybe spac-mth):
+
+% \def\mathskipsmall {\mskip\thinmuskip}
+% \def\mathskipmedium{\mskip\medmuskip}
+% \def\mathskipbig   {\mskip\thickmuskip}
+
+%D \macros
+%D   {setupmathematics}
+%D
+%D Configuration for integrals. (If needed we can speed this up and make it
+%D installable; no processaction is needed then).
+
+\installcorenamespace{mathematics}
+
+\installswitchcommandhandler \??mathematics {mathematics} \??mathematics
+
+\installmacrostack\currentmathematics
+
+\permanent\protected\tolerant\def\startmathematics[#1]% no grouping, if ever then also an optional second
+  {\push_macro_currentmathematics
+   \edef\currentmathematics{#1}% check for valid
+   \the\everyswitchmathematics}
+
+\permanent\protected\def\stopmathematics
+  {\pop_macro_currentmathematics
+   \the\everyswitchmathematics} % only needed at level zero
+
+\definemathematics[\v!default] % not needed, but nicer when nesting back to normal
+
+% Now we redefine \type {\mathematics} and \type {\m}:
+
+\pushoverloadmode
+
+    \permanent\protected\def\mathematics{\doifelsenextoptionalcs\math_m_yes\math_m_nop}
+
+    \aliased\let\m   \mathematics % we keep the simple versions
+    \aliased\let\math\mathematics % we keep the simple versions
+
+\popoverloadmode
+
+\def\math_m_yes
+  {\relax
+   \ifmmode
+     \expandafter\math_m_yes_math
+   \else
+     \expandafter\math_m_yes_text
+   \fi}
+
+\def\math_m_yes_math[#1]#2%
+  {#2} % grouping permits \mathbf etc
+
+\def\math_m_yes_text[#1]%
+  {\begingroup
+   \ifcondition\validassignment{#1}%
+     \setupcurrentmathematics[#1]%
+   \else
+     \edef\currentmathematics{#1}% check for valid
+   \fi
+   \edef\p_openup{\mathematicsparameter\c!openup}%
+   \ifx\p_openup\v!yes
+     \expandafter\math_m_yes_text_openedup
+   \else
+     \expandafter\math_m_yes_text_normal
+   \fi}
+
+\def\math_m_yes_text_openedup#1%
+  {\setbox\scratchbox\hbox\bgroup
+      \the\everyswitchmathematics\relax
+      \normalstartimath
+      #1%
+      \normalstopimath
+   \egroup
+   \ifdim\ht\scratchbox>\strutht
+     \math_inline_openup_start_yes
+   \orelse\ifdim\dp\scratchbox>\strutdp
+     \math_inline_openup_start_yes
+   \else
+     \math_inline_openup_start_nop
+   \fi
+   \unhbox\scratchbox % \normalstartimath#1\normalstopimath
+   \math_inline_openup_stop
+   \endgroup}
+
+\def\math_m_yes_text_normal#1%
+  {\the\everyswitchmathematics\relax
+   \normalstartimath
+   \begingroup#1\endgroup % grouping permits aftergroups trickery
+   \normalstopimath
+   \endgroup}
+
+\def\math_m_nop#1%
+  {\relax
+   \ifmmode
+     #1%
+   \else
+     \normalstartimath
+     \begingroup#1\endgroup % grouping permits aftergroups trickery
+     \normalstopimath
+   \fi}
+
+%D maybe more setters
+
+\permanent\protected\def\dm#1%
+  {\relax
+   \ifmmode
+     \beginmathgroup\forcedisplaymath#1\endmathgroup
+   \else
+     \startimath\begingroup\forcedisplaymath#1\endgroup\stopimath
+   \fi}
+
+\permanent\protected\def\im#1%
+  {\relax
+   \ifmmode
+     \beginmathgroup\forceinlinemath#1\endmathgroup
+   \else
+     \startimath#1\stopimath
+   \fi}
+
+% \aliased\let\m   \mathematics % we keep the simple versions
+
+% e.g.: \definemathematics[i:mp][setups=i:tight,openup=yes]
+
+% we need to control these otherwise:
+%
+% \prerelpenalty  \defaultprerelpenalty
+% \prebinoppenalty\defaultprebinoppenalty
+
+\startsetups math:spacing:default
+    \thickmuskip    \defaultthickmuskip
+    \medmuskip      \defaultmedmuskip
+    \thinmuskip     \defaultthinmuskip
+    \tinymuskip     \defaulttinymuskip
+    \relpenalty     \defaultrelpenalty
+    \binoppenalty   \defaultbinoppenalty
+    \prebinoppenalty\maxdimen
+    \prerelpenalty  \maxdimen
+\stopsetups
+
+\startsetups math:spacing:split
+    \thickmuskip    \defaultthickmuskip
+    \medmuskip      \defaultmedmuskip
+    \thinmuskip     \defaultthinmuskip
+    \tinymuskip     \defaulttinymuskip
+    \relpenalty     \defaultrelpenalty
+    \binoppenalty   \defaultbinoppenalty
+    \prebinoppenalty\defaultprebinoppenalty
+    \prerelpenalty  \defaultprerelpenalty
+\stopsetups
+
+\startsetups math:spacing:half
+    \thickmuskip    \halfthickmuskip
+    \medmuskip      \halfmedmuskip
+    \thinmuskip     \halfthinmuskip
+    \tinymuskip     \halftinymuskip
+    \relpenalty     \defaultrelpenalty
+    \binoppenalty   \defaultbinoppenalty
+    \prebinoppenalty\maxdimen
+    \prerelpenalty  \maxdimen
+\stopsetups
+
+\startsetups math:spacing:tight
+    \ifcase\raggedstatus
+        \thickmuskip   \halfthickmuskip
+        \medmuskip     \halfmedmuskip
+        \thinmuskip    \halfthinmuskip
+        \tinymuskip    \halftinymuskip
+    \else
+        \thickmuskip  1\halfthickmuskip
+        \medmuskip    1\halfmedmuskip
+        \thinmuskip   1\halfthinmuskip
+        \tinymuskip   1\halftinymuskip
+    \fi
+    \relpenalty     \defaultrelpenalty
+    \binoppenalty   \maxdimen
+    \prebinoppenalty\maxdimen
+    \prerelpenalty  \maxdimen
+\stopsetups
+
+\startsetups math:spacing:fixed
+    \ifcase\raggedstatus
+        \thickmuskip   \halfthickmuskip
+        \medmuskip     \halfmedmuskip
+        \thinmuskip    \halfthinmuskip
+        \tinymuskip    \halftinymuskip
+    \else
+        \thickmuskip  1\halfthickmuskip
+        \medmuskip    1\halfmedmuskip
+        \thinmuskip   1\halfthinmuskip
+        \tinymuskip   1\halftinymuskip
+    \fi
+    \relpenalty     \maxdimen
+    \binoppenalty   \maxdimen
+    \prebinoppenalty\maxdimen
+    \prerelpenalty  \maxdimen
+\stopsetups
+
+% this will reset the spacing to default values
+
+% \Umathspacingmode\allmathstyles\plusone % always pair driven
+
+% \startsetups math:spacing:presets
+%     \resetmathspacing
+%   % \ordordspacing                 \allmathstyles  \zeromuskip
+%     \inherited\ordopspacing        \allmathstyles  \thinmuskip
+%     \inherited\ordbinspacing       \allsplitstyles \medmuskip
+%     \inherited\ordbinspacing       \allscriptstyles\tinymuskip
+%     \inherited\ordrelspacing       \allsplitstyles \thickmuskip
+%     \inherited\ordrelspacing       \allscriptstyles\tinymuskip
+%   % \inherited\ordopenspacing      \allmathstyles  \zeromuskip
+%     \inherited\ordmiddlespacing    \allsplitstyles \medmuskip
+%     \inherited\ordmiddlespacing    \allscriptstyles\tinymuskip
+%   % \inherited\ordclosespacing     \allmathstyles  \zeromuskip
+%   % \inherited\ordpunctspacing     \allmathstyles  \zeromuskip
+%     \inherited\ordinnerspacing     \allsplitstyles \thinmuskip
+%     \inherited\ordinnerspacing     \allscriptstyles\tinymuskip
+%     \inherited\ordfracspacing      \allmathstyles  \tinymuskip
+%     \inherited\ordradspacing       \allmathstyles  \tinymuskip
+%     \inherited\opordspacing        \allmathstyles  \thinmuskip
+%     \inherited\opopspacing         \allmathstyles  \thinmuskip
+%   % \inherited \opbinspacing        \allmathstyles \zeromuskip
+%     \inherited\oprelspacing        \allsplitstyles \thickmuskip
+%     \inherited\oprelspacing        \allscriptstyles\tinymuskip
+%   % \inherited\opopenspacing       \allmathstyles  \zeromuskip
+%     \inherited\opmiddlespacing     \allsplitstyles \medmuskip
+%     \inherited\opmiddlespacing     \allscriptstyles\tinymuskip
+%   % \inherited\opclosespacing      \allmathstyles  \zeromuskip
+%   % \inherited\oppunctspacing      \allmathstyles  \zeromuskip
+%     \inherited\opinnerspacing      \allsplitstyles \thinmuskip
+%     \inherited\opinnerspacing      \allscriptstyles\tinymuskip
+%     \inherited\opfracspacing       \allmathstyles  \thinmuskip
+%     \inherited\opradspacing        \allmathstyles  \thinmuskip
+%     \inherited\binordspacing       \allsplitstyles \medmuskip
+%     \inherited\binordspacing       \allscriptstyles\tinymuskip
+%     \inherited\binopspacing        \allsplitstyles \medmuskip
+%     \inherited\binopspacing        \allscriptstyles\tinymuskip
+%   % \inherited\binbinspacing       \allmathstyles  \zeromuskip
+%   % \inherited\binrelspacing       \allmathstyles  \zeromuskip
+%     \inherited\binopenspacing      \allsplitstyles \medmuskip
+%     \inherited\binopenspacing      \allscriptstyles\tinymuskip
+%     \inherited\binmiddlespacing    \allsplitstyles \medmuskip
+%     \inherited\binmiddlespacing    \allscriptstyles\tinymuskip
+%   % \inherited\binclosespacing     \allmathstyles  \zeromuskip
+%   % \inherited\binpunctspacing     \allmathstyles  \zeromuskip
+%     \inherited\bininnerspacing     \allsplitstyles \medmuskip
+%     \inherited\bininnerspacing     \allscriptstyles\tinymuskip
+%     \inherited\binfracspacing      \allsplitstyles \medmuskip
+%     \inherited\binfracspacing      \allscriptstyles\tinymuskip
+%     \inherited\binradspacing       \allsplitstyles \medmuskip
+%     \inherited\binradspacing       \allscriptstyles\tinymuskip
+%     \inherited\relordspacing       \allsplitstyles \thickmuskip
+%     \inherited\relordspacing       \allscriptstyles\tinymuskip
+%     \inherited\relopspacing        \allsplitstyles \thickmuskip
+%     \inherited\relopspacing        \allscriptstyles\tinymuskip
+%   % \inherited\relbinspacing       \allmathstyles  \zeromuskip
+%   % \inherited\relrelspacing       \allmathstyles  \zeromuskip
+%     \inherited\relopenspacing      \allsplitstyles \thickmuskip
+%     \inherited\relopenspacing      \allscriptstyles\tinymuskip
+%     \inherited\relmiddlespacing    \allsplitstyles \thickmuskip
+%     \inherited\relmiddlespacing    \allscriptstyles\thinmuskip
+%   % \inherited\relclosespacing     \allmathstyles  \zeromuskip
+%   % \inherited\relpunctspacing     \allmathstyles  \zeromuskip
+%     \inherited\relinnerspacing     \allsplitstyles \thickmuskip
+%     \inherited\relinnerspacing     \allscriptstyles\tinymuskip
+%     \inherited\relfracspacing      \allsplitstyles \thickmuskip
+%     \inherited\relfracspacing      \allscriptstyles\tinymuskip
+%     \inherited\relradspacing       \allsplitstyles \thickmuskip
+%     \inherited\relradspacing       \allscriptstyles\tinymuskip
+%   % \inherited\openordspacing      \allmathstyles  \zeromuskip
+%   % \inherited\openopspacing       \allmathstyles  \zeromuskip
+%   % \inherited\openbinspacing      \allmathstyles  \zeromuskip
+%   % \inherited\openrelspacing      \allmathstyles  \zeromuskip
+%   % \inherited\openopenspacing     \allmathstyles  \zeromuskip
+%   % \inherited\openmiddlespacing   \allmathstyles  \zeromuskip
+%   % \inherited\openclosespacing    \allmathstyles  \zeromuskip
+%   % \inherited\openpunctspacing    \allmathstyles  \zeromuskip
+%   % \inherited\openinnerspacing    \allmathstyles  \zeromuskip
+%     \inherited\openfracspacing     \allmathstyles  \tinymuskip
+%   % \inherited\openradspacing      \allmathstyles  \zeromuskip
+%   % \inherited\closeordspacing     \allmathstyles  \zeromuskip
+%     \inherited\closeopspacing      \allmathstyles  \thinmuskip
+%     \inherited\closebinspacing     \allsplitstyles \medmuskip
+%     \inherited\closebinspacing     \allscriptstyles\tinymuskip
+%     \inherited\closerelspacing     \allsplitstyles \thickmuskip
+%     \inherited\closerelspacing     \allscriptstyles\tinymuskip
+%   % \inherited\closeopenspacing    \allmathstyles  \zeromuskip
+%   % \inherited\closemiddlespacing  \allmathstyles  \zeromuskip
+%   % \inherited\closeclosespacing   \allmathstyles  \zeromuskip
+%   % \inherited\closepunctspacing   \allmathstyles  \zeromuskip
+%     \inherited\closeinnerspacing   \allsplitstyles \thinmuskip
+%     \inherited\closeinnerspacing   \allscriptstyles\tinymuskip
+%     \inherited\closefracspacing    \allsplitstyles \thinmuskip
+%     \inherited\closefracspacing    \allscriptstyles\tinymuskip
+%   % \inherited\closeradspacing     \allmathstyles  \zeromuskip
+%     \inherited\punctordspacing     \allsplitstyles \thinmuskip
+%     \inherited\punctordspacing     \allscriptstyles\tinymuskip
+%     \inherited\punctopspacing      \allsplitstyles \thinmuskip
+%     \inherited\punctopspacing      \allscriptstyles\tinymuskip
+%   % \inherited\punctbinspacing     \allmathstyles  \zeromuskip
+%     \inherited\punctrelspacing     \allsplitstyles \thinmuskip
+%     \inherited\punctrelspacing     \allscriptstyles\tinymuskip
+%     \inherited\punctopenspacing    \allsplitstyles \thinmuskip
+%     \inherited\punctopenspacing    \allscriptstyles\tinymuskip
+%     \inherited\punctmiddlespacing  \allsplitstyles \thinmuskip
+%     \inherited\punctmiddlespacing  \allscriptstyles\tinymuskip
+%     \inherited\punctclosespacing   \allsplitstyles \thinmuskip
+%     \inherited\punctclosespacing   \allscriptstyles\tinymuskip
+%     \inherited\punctpunctspacing   \allsplitstyles \thinmuskip
+%     \inherited\punctpunctspacing   \allscriptstyles\tinymuskip
+%     \inherited\punctinnerspacing   \allsplitstyles \thinmuskip
+%     \inherited\punctinnerspacing   \allscriptstyles\tinymuskip
+%     \inherited\punctfracspacing    \allsplitstyles \thinmuskip
+%     \inherited\punctfracspacing    \allscriptstyles\tinymuskip
+%     \inherited\punctradspacing     \allsplitstyles \thinmuskip
+%     \inherited\punctradspacing     \allscriptstyles\tinymuskip
+%     \inherited\innerordspacing     \allsplitstyles \thinmuskip
+%     \inherited\innerordspacing     \allscriptstyles\tinymuskip
+%     \inherited\inneropspacing      \allmathstyles  \thinmuskip
+%     \inherited\innerbinspacing     \allsplitstyles \medmuskip
+%     \inherited\innerbinspacing     \allscriptstyles\tinymuskip
+%     \inherited\innerrelspacing     \allsplitstyles \thickmuskip
+%     \inherited\innerrelspacing     \allscriptstyles\tinymuskip
+%     \inherited\inneropenspacing    \allsplitstyles \thinmuskip
+%     \inherited\inneropenspacing    \allscriptstyles\tinymuskip
+%     \inherited\innermiddlespacing  \allsplitstyles \thinmuskip
+%     \inherited\innermiddlespacing  \allscriptstyles\tinymuskip
+%   % \inherited\innerclosespacing   \allmathstyles  \zeromuskip
+%     \inherited\innerpunctspacing   \allsplitstyles \thinmuskip
+%     \inherited\innerpunctspacing   \allscriptstyles\tinymuskip
+%     \inherited\innerinnerspacing   \allsplitstyles \thinmuskip
+%     \inherited\innerinnerspacing   \allscriptstyles\tinymuskip
+%     \inherited\innerfracspacing    \allsplitstyles \thinmuskip
+%     \inherited\innerfracspacing    \allscriptstyles\tinymuskip
+%     \inherited\innerradspacing     \allsplitstyles \thinmuskip
+%     \inherited\innerradspacing     \allscriptstyles\tinymuskip
+%     \inherited\fracordspacing      \allmathstyles  \tinymuskip
+%     \inherited\fracopspacing       \allmathstyles  \thinmuskip
+%     \inherited\fracbinspacing      \allsplitstyles \medmuskip
+%     \inherited\fracbinspacing      \allscriptstyles\tinymuskip
+%     \inherited\fracrelspacing      \allsplitstyles \thickmuskip
+%     \inherited\fracrelspacing      \allscriptstyles\tinymuskip
+%     \inherited\fracopenspacing     \allsplitstyles \thinmuskip
+%     \inherited\fracopenspacing     \allscriptstyles\tinymuskip
+%     \inherited\fracmiddlespacing   \allsplitstyles \medmuskip
+%     \inherited\fracmiddlespacing   \allscriptstyles\tinymuskip
+%     \inherited\fracclosespacing    \allmathstyles  \tinymuskip
+%   % \inherited\fracpunctspacing    \allmathstyles  \zeromuskip
+%     \inherited\fracinnerspacing    \allsplitstyles \thinmuskip
+%     \inherited\fracinnerspacing    \allscriptstyles\tinymuskip
+%     \inherited\fracfracspacing     \allsplitstyles \thinmuskip
+%     \inherited\fracfracspacing     \allscriptstyles\tinymuskip
+%     \inherited\fracradspacing      \allmathstyles  \tinymuskip
+%     \inherited\radordspacing       \allsplitstyles \tinymuskip
+%     \inherited\radopspacing        \allmathstyles  \thinmuskip
+%     \inherited\radbinspacing       \allsplitstyles \medmuskip
+%     \inherited\radbinspacing       \allscriptstyles\tinymuskip
+%     \inherited\radrelspacing       \allsplitstyles \thickmuskip
+%     \inherited\radrelspacing       \allscriptstyles\tinymuskip
+%   % \inherited\radopenspacing      \allmathstyles  \zeromuskip
+%   % \inherited\radmiddlespacing    \allmathstyles  \zeromuskip
+%   % \inherited\radclosespacing     \allmathstyles  \zeromuskip
+%   % \inherited\radpunctspacing     \allmathstyles  \zeromuskip
+%     \inherited\radinnerspacing     \allsplitstyles \thinmuskip
+%     \inherited\radinnerspacing     \allscriptstyles\tinymuskip
+%     \inherited\radfracspacing      \allmathstyles  \tinymuskip
+%     \inherited\radradspacing       \allmathstyles  \tinymuskip
+%     \inherited\middleordspacing    \allsplitstyles \medmuskip
+%     \inherited\middleordspacing    \allscriptstyles\tinymuskip
+%     \inherited\middleopspacing     \allmathstyles  \thinmuskip
+%     \inherited\middlebinspacing    \allsplitstyles \medmuskip
+%     \inherited\middlebinspacing    \allscriptstyles\tinymuskip
+%     \inherited\middlerelspacing    \allsplitstyles \thickmuskip
+%     \inherited\middlerelspacing    \allscriptstyles\tinymuskip
+%   % \inherited\middleopenspacing   \allmathstyles  \zeromuskip
+%   % \inherited\middlemiddlespacing \allmathstyles  \zeromuskip
+%   % \inherited\middleclosespacing  \allmathstyles  \zeromuskip
+%   % \inherited\middlepunctspacing  \allmathstyles  \zeromuskip
+%     \inherited\middleinnerspacing  \allsplitstyles \thinmuskip
+%     \inherited\middleinnerspacing  \allscriptstyles\tinymuskip
+%     \inherited\middlefracspacing   \allsplitstyles \medmuskip
+%     \inherited\middlefracspacing   \allscriptstyles\tinymuskip
+%   % \inherited\middleradspacing    \allmathstyles  \zeromuskip
+%     %
+%     \inherited\setmathspacing \mathclosecode     \mathdifferentialcode \allsplitstyles  \thinmuskip
+%     \inherited\setmathspacing \mathclosecode     \mathdifferentialcode \allscriptstyles \tinymuskip
+%     \inherited\setmathspacing \mathordinarycode  \mathdifferentialcode \allsplitstyles  \thinmuskip
+%     \inherited\setmathspacing \mathordinarycode  \mathdifferentialcode \allscriptstyles \tinymuskip
+%     \inherited\setmathspacing \mathfactorialcode \mathordinarycode     \allsplitstyles  \thinmuskip
+%     \inherited\setmathspacing \mathfactorialcode \mathordinarycode     \allscriptstyles \tinymuskip
+%     \inherited\setmathspacing \mathfactorialcode \mathfactorialcode    \allmathstyles   \zeromuskip
+%     %
+%     \inherited\setmathspacing \mathopencode      \mathconstructcode    \allmathstyles   \thinmuskip
+%     \inherited\setmathspacing \mathconstructcode \mathclosecode        \allmathstyles   \thinmuskip
+% \stopsetups
+
+\startsetups math:spacing:presets
+    \resetmathspacing
+    %
+  % \inherited\setmathspacing \mathordinarycode    \mathordinarycode     \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathordinarycode    \mathoperatorcode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathbinarycode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathbinarycode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathordinarycode    \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathrelationcode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathordinarycode    \mathopencode         \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathordinarycode    \mathmiddlecode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathmiddlecode       \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathordinarycode    \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathordinarycode    \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathordinarycode    \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathordinarycode    \mathfractioncode     \allmathstyles   \tinymuskip
+    \inherited\setmathspacing \mathordinarycode    \mathradicalcode      \allmathstyles   \tinymuskip
+    %
+    \inherited\setmathspacing \mathoperatorcode    \mathordinarycode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathoperatorcode     \allmathstyles   \thinmuskip
+  % \inherited\setmathspacing \mathoperatorcode    \mathbinarycode       \allmathstyles \ zeromuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathrelationcode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathoperatorcode    \mathopencode         \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathmiddlecode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathmiddlecode       \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathoperatorcode    \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathoperatorcode    \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathfractioncode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathoperatorcode    \mathradicalcode      \allmathstyles   \thinmuskip
+    %
+    \inherited\setmathspacing \mathbinarycode      \mathordinarycode     \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathordinarycode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathbinarycode      \mathoperatorcode     \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathoperatorcode     \allscriptstyles \tinymuskip
+ %% \inherited\setmathspacing \mathbinarycode      \mathbinarycode       \allmathstyles   \zeromuskip
+ %% \inherited\setmathspacing \mathbinarycode      \mathrelationcode     \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathbinarycode      \mathopencode         \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathopencode         \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathbinarycode      \mathmiddlecode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathmiddlecode       \allscriptstyles \tinymuskip
+ %% \inherited\setmathspacing \mathbinarycode      \mathclosecode        \allmathstyles   \zeromuskip
+ %% \inherited\setmathspacing \mathbinarycode      \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathbinarycode      \mathinnercode        \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathbinarycode      \mathfractioncode     \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathfractioncode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathbinarycode      \mathradicalcode      \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathbinarycode      \mathradicalcode      \allscriptstyles \tinymuskip
+    %
+    \inherited\setmathspacing \mathrelationcode    \mathordinarycode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathordinarycode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathrelationcode    \mathoperatorcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathoperatorcode     \allscriptstyles \tinymuskip
+ %% \inherited\setmathspacing \mathrelationcode    \mathbinarycode       \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathrelationcode    \mathrelationcode     \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathrelationcode    \mathopencode         \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathopencode         \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathrelationcode    \mathmiddlecode       \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathmiddlecode       \allscriptstyles \thinmuskip
+  % \inherited\setmathspacing \mathrelationcode    \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathrelationcode    \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathrelationcode    \mathinnercode        \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathrelationcode    \mathfractioncode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathfractioncode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathrelationcode    \mathradicalcode      \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathrelationcode    \mathradicalcode      \allscriptstyles \tinymuskip
+    %
+  % \inherited\setmathspacing \mathopencode        \mathordinarycode     \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathoperatorcode     \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathbinarycode       \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathrelationcode     \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathopencode         \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathmiddlecode       \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathpunctuationcode  \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathopencode        \mathinnercode        \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathopencode        \mathfractioncode     \allmathstyles   \tinymuskip
+  % \inherited\setmathspacing \mathopencode        \mathradicalcode      \allmathstyles   \zeromuskip
+    %
+  % \inherited\setmathspacing \mathclosecode       \mathordinarycode     \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathclosecode       \mathoperatorcode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathclosecode       \mathbinarycode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathclosecode       \mathbinarycode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathclosecode       \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathclosecode       \mathrelationcode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathclosecode       \mathopencode         \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathclosecode       \mathmiddlecode       \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathclosecode       \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathclosecode       \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathclosecode       \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathclosecode       \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathclosecode       \mathfractioncode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathclosecode       \mathfractioncode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathclosecode       \mathradicalcode      \allmathstyles   \zeromuskip
+    %
+    \inherited\setmathspacing \mathpunctuationcode \mathordinarycode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathordinarycode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathoperatorcode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathoperatorcode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathpunctuationcode \mathbinarycode       \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathrelationcode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathrelationcode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathopencode         \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathopencode         \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathmiddlecode       \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathmiddlecode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathclosecode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathclosecode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathpunctuationcode  \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathpunctuationcode  \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathfractioncode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathfractioncode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathradicalcode      \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathpunctuationcode \mathradicalcode      \allscriptstyles \tinymuskip
+    %
+    \inherited\setmathspacing \mathinnercode       \mathordinarycode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathordinarycode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathoperatorcode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathbinarycode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathinnercode       \mathbinarycode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathinnercode       \mathrelationcode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathopencode         \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathopencode         \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathmiddlecode       \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathmiddlecode       \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathinnercode       \mathclosecode        \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathinnercode       \mathpunctuationcode  \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathpunctuationcode  \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathfractioncode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathfractioncode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathinnercode       \mathradicalcode      \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathinnercode       \mathradicalcode      \allscriptstyles \tinymuskip
+    %
+    \inherited\setmathspacing \mathfractioncode    \mathordinarycode     \allmathstyles   \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathoperatorcode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathbinarycode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathbinarycode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathrelationcode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathopencode         \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathopencode         \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathmiddlecode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathmiddlecode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathclosecode        \allmathstyles   \tinymuskip
+  % \inherited\setmathspacing \mathfractioncode    \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathfractioncode    \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathfractioncode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathfractioncode    \mathfractioncode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfractioncode    \mathradicalcode      \allmathstyles   \tinymuskip
+    %
+    \inherited\setmathspacing \mathradicalcode     \mathordinarycode     \allsplitstyles  \tinymuskip
+    \inherited\setmathspacing \mathradicalcode     \mathoperatorcode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathradicalcode     \mathbinarycode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathradicalcode     \mathbinarycode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathradicalcode     \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathradicalcode     \mathrelationcode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathradicalcode     \mathopencode         \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathradicalcode     \mathmiddlecode       \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathradicalcode     \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathradicalcode     \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathradicalcode     \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathradicalcode     \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathradicalcode     \mathfractioncode     \allmathstyles   \tinymuskip
+    \inherited\setmathspacing \mathradicalcode     \mathradicalcode      \allmathstyles   \tinymuskip
+    %
+    \inherited\setmathspacing \mathmiddlecode      \mathordinarycode     \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathordinarycode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathoperatorcode     \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathbinarycode       \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathbinarycode       \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathrelationcode     \allsplitstyles  \thickmuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathrelationcode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathmiddlecode      \mathopencode         \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathmiddlecode      \mathmiddlecode       \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathmiddlecode      \mathclosecode        \allmathstyles   \zeromuskip
+  % \inherited\setmathspacing \mathmiddlecode      \mathpunctuationcode  \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathinnercode        \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathinnercode        \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathfractioncode     \allsplitstyles  \medmuskip
+    \inherited\setmathspacing \mathmiddlecode      \mathfractioncode     \allscriptstyles \tinymuskip
+  % \inherited\setmathspacing \mathmiddlecode      \mathradicalcode      \allmathstyles   \zeromuskip
+    %
+    \inherited\setmathspacing \mathclosecode       \mathdifferentialcode \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathclosecode       \mathdifferentialcode \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathordinarycode    \mathdifferentialcode \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathdifferentialcode \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfactorialcode   \mathordinarycode     \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathfactorialcode   \mathordinarycode     \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathfactorialcode   \mathfactorialcode    \allmathstyles   \zeromuskip
+    %
+    \inherited\setmathspacing \mathopencode        \mathconstructcode    \allmathstyles   \thinmuskip
+    \inherited\setmathspacing \mathconstructcode   \mathclosecode        \allmathstyles   \thinmuskip
+    %
+    \inherited\setmathspacing \mathdimensioncode   \mathdimensioncode    \allmathstyles   \zeromuskip
+    \inherited\setmathspacing \mathordinarycode    \mathdimensioncode    \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathordinarycode    \mathdimensioncode    \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathdigitcode       \mathdimensioncode    \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathdigitcode       \mathdimensioncode    \allscriptstyles \tinymuskip
+    \inherited\setmathspacing \mathclosecode       \mathdimensioncode    \allsplitstyles  \thinmuskip
+    \inherited\setmathspacing \mathclosecode       \mathdimensioncode    \allscriptstyles \tinymuskip
+    %
+\stopsetups
+
+\directsetup{math:spacing:default}
+\directsetup{math:spacing:presets}
+
+% \dorecurse{80}{test \m[i:tight]{\red \fakeformula} test }
+
+%setupmathematics            [\c!setups=math:spacing:default]
+
+\definemathematics[i:default][\c!setups=math:spacing:equal]
+\definemathematics[i:half]   [\c!setups=math:spacing:half]
+\definemathematics[i:tight]  [\c!setups=math:spacing:tight]
+\definemathematics[i:fixed]  [\c!setups=math:spacing:fixed]
+
+% Normally the next is applied to only one character.
+%
+% $ABC$ $\cal ABC$ $\mathaltcal ABC$
+
+% todo: only in mmode
+% these commands are semi-public but should not be used directly (lua names wil change)
+
+%permanent\protected\def\setmathattribute  #1#2{\ifmmode\clf_setmathattribute{#1}{#2}\fi}
+%permanent\protected\def\setmathalphabet     #1{\ifmmode\clf_setmathalphabet{#1}\fi}
+%permanent\protected\def\setmathfontstyle    #1{\ifmmode\clf_setmathstyle{#1}\fi}
+%permanent\protected\def\setmathfontalternate#1{\ifmmode\clf_setmathalternate{#1}\fi}
+
+\installcorenamespace{mathstylealternative} % might become a setuphandler
+
+\permanent\protected\def\setmathfontstylealternate#1%
+  {\ifcsname\??mathstylealternative\fontclass:#1\endcsname
+     \expandafter\setmathfontalternate\lastnamedcs
+   \orelse\ifcsname\??mathstylealternative#1\endcsname
+     \expandafter\setmathfontalternate\lastnamedcs
+   \fi}
+
+\permanent\tolerant\protected\def\setupmathrendering[#1]#*[#2]% the name might change
+  {\ifparameter#2\or
+     \getparameters[\??mathstylealternative#1:][#2]%
+   \else
+     \getparameters[\??mathstylealternative][#1]%
+   \fi}
+
+\appendtoks
+    \edef\p_stylealternative{\mathematicsparameter\c!stylealternative}%
+    \ifempty\p_stylealternative\else
+        \presetmathfontalternate{\p_stylealternative}%
+    \fi
+\to \everymathematics
+
+% if there were many features we could have a feature pass over math nodes but it makes no
+% sense now so we have commands to deal with it
+
+% \enabletrackers[math.alternates]
+% \setupbodyfont[lucidaot]
+%
+% \startTEXpage
+%     \setupmathematics[stylealternative={reset}]$x+\mathcal A$\par
+%     \setupmathematics[stylealternative={reset,calligraphic}]$x+\mathcal A$\par
+%     \setupmathematics[stylealternative={reset,italic}]$x+\mathcal A$\par
+%     \setupmathematics[stylealternative={reset,calligraphic,italic}]$x+\mathcal A$
+% \stopTEXpage
+
+% no longer needed now we have enforce so the next few lines will go
+
+% \pushoverloadmode
+%     \enforced\let\dotlessi\dotlessi
+%     \enforced\let\dotlessj\dotlessj
+% \popoverloadmode
+
+\permanent\protected\def\mathaltcalligraphic{\setmathfontalternate{calligraphic}\cal}          % set via goody file
+\permanent\protected\def\mathaltitalic      {\setmathfontalternate{italic}}                    % set via goody file
+\permanent\protected\def\mathslashedzero    {\begingroup\setmathfontalternate{zero}∅\endgroup} % set via goody file or automatic
+\permanent\protected\def\mathdotless        {\setmathfontalternate{dotless}}                   % set via goody file or automatic
+\permanent\protected\def\mathdotlessi       {\begingroup\mathdotless i\endgroup}
+\permanent\protected\def\mathdotlessj       {\begingroup\mathdotless j\endgroup}
+
+\aliased\let\mathaltcal\mathaltcalligraphic
+\aliased\let\mathaltit \mathaltitalic
+
+%aliased\let\textslashedzero\slashedzero \permanent\protected\def\autoslashedzero{\mathortext\mathslashedzero\textslashedzero}
+\aliased\let\textdotlessi   \dotlessi    \permanent\protected\def\autodotlessi   {\mathortext\mathdotlessi   \textdotlessi}
+\aliased\let\textdotlessj   \dotlessj    \permanent\protected\def\autodotlessj   {\mathortext\mathdotlessj   \textdotlessj}
+
+\appendtoks
+    %enforced\let\slashedzero\autoslashedzero
+    \enforced\let\dotlessi\autodotlessi
+    \enforced\let\dotlessj\autodotlessj
+\to \everymathematics
+
+\aliased\let\setmathfontalternative     \setmathfontalternate
+\aliased\let\setmathfontstylealternative\setmathfontstylealternate
+\aliased\let\mathalternate              \setmathfontalternate
+
+\permanent\protected\def\math_upright     {\setmathattribute\s!regular\s!tf\setmathfontstylealternate\s!tf}
+\permanent\protected\def\math_italic      {\setmathattribute\s!regular\s!it\setmathfontstylealternate\s!it}
+\permanent\protected\def\math_script      {\setmathalphabet \s!script    \setmathfontstylealternate\s!script\setmathvariant\s!handwriting}
+\permanent\protected\def\math_calligraphic{\setmathalphabet \s!script    \setmathfontstylealternate\s!script\setmathvariant\s!calligraphy}
+\permanent\protected\def\math_fraktur     {\setmathalphabet \s!fraktur   \setmathfontstylealternate\s!fraktur}
+\permanent\protected\def\math_blackboard  {\setmathalphabet \s!blackboard\setmathfontstylealternate\s!blackboard}
+
+\permanent\protected\def\mathupright     {\mathgroupedcommandcs\math_upright     }
+\permanent\protected\def\mathitalic      {\mathgroupedcommandcs\math_italic      }
+\permanent\protected\def\mathscript      {\mathgroupedcommandcs\math_script      }
+\permanent\protected\def\mathcalligraphic{\mathgroupedcommandcs\math_calligraphic}
+\permanent\protected\def\mathfraktur     {\mathgroupedcommandcs\math_fraktur     }
+\permanent\protected\def\mathblackboard  {\mathgroupedcommandcs\math_blackboard  }
+
+\permanent\protected\def\math_rm{\setmathattribute\s!rm\s!tf\setmathfontstylealternate\s!tf}
+\permanent\protected\def\math_ss{\setmathattribute\s!ss\s!tf\setmathfontstylealternate\s!tf}
+\permanent\protected\def\math_tt{\setmathattribute\s!tt\s!tf\setmathfontstylealternate\s!tf}
+
+\permanent\protected\def\math_tf{\setmathfontstyle\s!tf\setmathfontstylealternate\s!tf}
+\permanent\protected\def\math_sl{\setmathfontstyle\s!it\setmathfontstylealternate\s!it} % no sl
+\permanent\protected\def\math_it{\setmathfontstyle\s!it\setmathfontstylealternate\s!it}
+
+\permanent\protected\def\math_bf{\setmathfontstyle\s!bf\setmathfontstylealternate\s!bf}
+\permanent\protected\def\math_bs{\setmathfontstyle\s!bi\setmathfontstylealternate\s!bi} % no sl
+\permanent\protected\def\math_bi{\setmathfontstyle\s!bi\setmathfontstylealternate\s!bi}
+
+\permanent\protected\def\mathrm{\mathgroupedcommandcs\math_rm} % \relax not needed
+\permanent\protected\def\mathss{\mathgroupedcommandcs\math_ss}
+\permanent\protected\def\mathtt{\mathgroupedcommandcs\math_tt}
+
+\permanent\protected\def\mathtf{\mathgroupedcommandcs\math_tf}
+\permanent\protected\def\mathsl{\mathgroupedcommandcs\math_sl}
+\permanent\protected\def\mathit{\mathgroupedcommandcs\math_it}
+
+\permanent\protected\def\mathbf{\mathgroupedcommandcs\math_bf}
+\permanent\protected\def\mathbs{\mathgroupedcommandcs\math_bs}
+\permanent\protected\def\mathbi{\mathgroupedcommandcs\math_bi}
+
+\aliased\let\math_default\math_italic
+\aliased\let\mathdefault \math_italic
+
+\appendtoks
+    \edef\p_default{\mathematicsparameter\c!default}%
+    \ifx\p_default\v!normal
+      \enforced\let\mathdefault \math_upright
+      \enforced\let\math_default\math_upright
+    \else
+      \enforced\let\mathdefault \math_italic
+      \enforced\let\math_default\math_italic
+    \fi
+\to \everysetupmathematics
+
+\setupmathematics
+  [\c!default=\v!italic]
+
+\aliased\let\tfmath\mathtf % maybe a grouped command
+\aliased\let\slmath\mathsl
+\aliased\let\itmath\mathit
+
+\aliased\let\bfmath\mathbf
+\aliased\let\bsmath\mathbs
+\aliased\let\bimath\mathbi
+
+\aliased\let\Bbb\mathblackboard
+
+\permanent\protected\def\frak      {\ifmmode\expandafter\mathfraktur     \fi}
+\permanent\protected\def\cal       {\ifmmode\expandafter\mathcalligraphic\fi}
+\permanent\protected\def\bbd       {\ifmmode\expandafter\mathblackboard  \fi}
+\permanent\protected\def\blackboard{\ifmmode\expandafter\mathblackboard  \fi}
+\permanent\protected\def\fraktur   {\ifmmode\expandafter\mathfraktur     \fi}
+\permanent\protected\def\gothic    {\ifmmode\expandafter\mathfraktur     \fi}
+
+\aliased\let\mathcal \mathcalligraphic % for AMS compatibility
+\aliased\let\mathscr \mathscript       % for AMS compatibility
+\aliased\let\mathfrak\mathfraktur      % for AMS compatibility
+\aliased\let\mathbb  \mathblackboard   % for AMS compatibility
+
+\ifdefined\normaltf \else \permanent\let\normaltf\tf \fi \permanent\protected\def\tf{\ifmmode\expandafter\mathtf\else\expandafter\normaltf\fi}
+\ifdefined\normalbf \else \permanent\let\normalbf\bf \fi \permanent\protected\def\bf{\ifmmode\expandafter\mathbf\else\expandafter\normalbf\fi}
+\ifdefined\normalit \else \permanent\let\normalit\it \fi \permanent\protected\def\it{\ifmmode\expandafter\mathit\else\expandafter\normalit\fi}
+\ifdefined\normalsl \else \permanent\let\normalsl\sl \fi \permanent\protected\def\sl{\ifmmode\expandafter\mathsl\else\expandafter\normalsl\fi}
+\ifdefined\normalbi \else \permanent\let\normalbi\bi \fi \permanent\protected\def\bi{\ifmmode\expandafter\mathbi\else\expandafter\normalbi\fi}
+\ifdefined\normalbs \else \permanent\let\normalbs\bs \fi \permanent\protected\def\bs{\ifmmode\expandafter\mathbs\else\expandafter\normalbs\fi}
+
+\permanent\protected\def\rm{\ifmmode\expandafter\mathrm\else\expandafter\normalrm\fi}
+\permanent\protected\def\ss{\ifmmode\expandafter\mathss\else\expandafter\normalss\fi}
+\permanent\protected\def\tt{\ifmmode\expandafter\mathtt\else\expandafter\normaltt\fi}
+
+\ifdefined\mr \else \let\mr\relax \fi % hm ... permanent
+\ifdefined\mb \else \let\mb\relax \fi % hm ... permanent
+
+% 1: $\setmathattribute{ss}{bf}3$
+% 2: $\setmathattribute{ss}{bf}\setmathfontstylealternate{bf}3$
+% 3: $\setmathattribute{ss}{bf}\setmathfontstyle{bf}3$
+% 4: $\setmathattribute{ss}{bf}\setmathfontstyle{bf}\setmathfontstylealternate{bf}3$
+% 5: $e=mc^2 \quad \mb e=mc^2$
+
+\prependtoks
+    \math_default
+\to \everymathematics
+
+%D We could set the rendering attribute at the \LUA\ end but as there can be many
+%D small math snippets we keep track of the state at the \TEX\ end (mapping is
+%D export safe).
+%D
+%D \starttyping
+%D \startformula
+%D     \reals {\mathbf R} \utfchar{"0211D} \utfchar{"1D411}
+%D \stopformula
+%D
+%D \setupmathematics
+%D   [symbolset=blackboard-to-bold]
+%D
+%D \startformula
+%D     \reals {\mathbf R} \utfchar{"0211D} \utfchar{"1D411}
+%D \stopformula
+%D \stoptyping
+
+\newcount\c_math_renderings_attribute
+
+\appendtoks
+    \c_math_renderings_attribute\clf_mathrenderset{\mathematicsparameter\c!symbolset}\relax
+\to \everysetupmathematics % only in mathematics
+
+\appendtoks
+    \ifcase\c_math_renderings_attribute\else
+        \c_attr_mathrendering\c_math_renderings_attribute
+    \fi
+\to \everymathematics
+
+\setupmathematics
+  [\c!symbolset=]
+
+%D \macros
+%D   {boldsymbol}
+%D
+%D To be done.
+
+\mutable\let\mathboldsymbol\relax % yet unsupported, will be
+
+\permanent\protected\def\boldsymbol
+  {\mathortext\mathboldsymbol\bold}
+
+%D Helpers (defined at the \LUA\ end):
+
+% \utfmathclass          #1
+% \utfmathstretch        #1
+% \utfmathcommand        #1
+% \utfmathfiller         #1
+%
+% \utfmathcommandabove   #1..
+% \utfmathcommandbelow   #1..
+% \utfmathcommandfiller  #1..
+%
+% \doifelseutfmathaccent #1#2#3
+% \doifelseutfmathabove  #1#2#3
+% \doifelseutfmathbelow  #1#2#3
+% \doifelseutfmathfiller #1#2#3
+% \doifelseutfmathlimop  #1#2#3
+
+\aliased\let\doifutfmathaccentelse \doifelseutfmathaccent
+\aliased\let\doifutfmathaboveelse  \doifelseutfmathabove
+\aliased\let\doifutfmathbelowelse  \doifelseutfmathbelow
+\aliased\let\doifutfmathfillerelse \doifelseutfmathfiller
+\aliased\let\doifutfmathlimopelse  \doifelseutfmathlimop
+
+%D Not used that much:
+
+\permanent\protected\def\mathlimop#1{\normalmathop{#1}} %no \limits
+\permanent\protected\def\mathbox  #1{\dontleavehmode\hbox\Ustartmath\mathsurround\zeropoint#1\Ustopmath}
+\permanent\protected\def\mathnolop#1{\normalmathop{#1}\nolimits}
+
+% \permanent\protected\def\mathlimop#1{\mathatom \mathoperatorcode options "C0000 {#1}} % auto "40000 + "80000
+% \permanent\protected\def\mathnolop#1{\mathatom \mathoperatorcode options "80000 {#1}}
+
+\aliased\let\mathnothing\firstofoneunexpanded
+\aliased\let\mathalpha  \firstofoneunexpanded
+
+% \installcorenamespace {mathclasses}
+%
+% \letcsname\??mathclasses         ord\endcsname\normalmathord
+% \letcsname\??mathclasses          op\endcsname\normalmathop
+% \letcsname\??mathclasses         rel\endcsname\normalmathrel
+% \letcsname\??mathclasses         bin\endcsname\normalmathbin
+% \letcsname\??mathclasses       punct\endcsname\normalmathpunct
+%
+% \letcsname\??mathclasses            \endcsname\normalmathord
+% \letcsname\??mathclasses       inner\endcsname\normalmathinner
+% \letcsname\??mathclasses        open\endcsname\normalmathopen
+% \letcsname\??mathclasses       close\endcsname\normalmathclose
+% \letcsname\??mathclasses    ordinary\endcsname\normalmathord
+% \letcsname\??mathclasses    operator\endcsname\normalmathop
+% \letcsname\??mathclasses    relation\endcsname\normalmathrel
+% \letcsname\??mathclasses      binary\endcsname\normalmathbin
+% \letcsname\??mathclasses punctuation\endcsname\normalmathpunct
+% \letcsname\??mathclasses    fraction\endcsname\normalmathfrac
+% \letcsname\??mathclasses     radical\endcsname\normalmathrad
+
+%D We need only a subset because many classes are sort of special.
+
+\installcorenamespace{mathcodecommand}
+
+% short:
+
+\aliased\letcsname\??mathcodecommand         ord\endcsname\mathord
+\aliased\letcsname\??mathcodecommand          op\endcsname\mathop
+\aliased\letcsname\??mathcodecommand         rel\endcsname\mathrel
+\aliased\letcsname\??mathcodecommand         bin\endcsname\mathbin
+\aliased\letcsname\??mathcodecommand       punct\endcsname\mathpunct
+
+% official:
+
+\aliased\letcsname\??mathcodecommand            \endcsname\normalmathord
+\aliased\letcsname\??mathcodecommand       inner\endcsname\normalmathinner
+\aliased\letcsname\??mathcodecommand        open\endcsname\normalmathopen
+\aliased\letcsname\??mathcodecommand       close\endcsname\normalmathclose
+\aliased\letcsname\??mathcodecommand    ordinary\endcsname\normalmathord
+\aliased\letcsname\??mathcodecommand    operator\endcsname\normalmathop
+\aliased\letcsname\??mathcodecommand    relation\endcsname\normalmathrel
+\aliased\letcsname\??mathcodecommand      binary\endcsname\normalmathbin
+\aliased\letcsname\??mathcodecommand punctuation\endcsname\normalmathpunct
+\aliased\letcsname\??mathcodecommand    fraction\endcsname\normalmathfrac
+\aliased\letcsname\??mathcodecommand     radical\endcsname\normalmathrad
+
+% special:
+
+\aliased\letcsname\??mathcodecommand       limop\endcsname\mathlimop
+\aliased\letcsname\??mathcodecommand       nolop\endcsname\mathnolop
+
+% obsolete:
+
+\aliased\letcsname\??mathcodecommand         box\endcsname\mathbox
+%aliased\letcsname\??mathcodecommand      choice\endcsname\mathnothing
+\aliased\letcsname\??mathcodecommand       alpha\endcsname\mathalpha % hm
+\aliased\letcsname\??mathcodecommand     nothing\endcsname\mathnothing
+
+% usage:
+
+\def\math_class_by_parameter       #1{\normalexpanded{\noexpand\math_class_by_parameter_indeed{#1\c!mathclass}}}
+\def\math_class_by_parameter_indeed#1{\csname\??mathcodecommand\ifcsname\??mathcodecommand#1\endcsname#1\fi\endcsname}
+
+\permanent          \def\mathcodenumber #1{\the\csname math#1code\endcsname}
+\permanent\protected\def\mathcodecommand#1{\csname\??mathcodecommand#1\endcsname}
+\permanent          \def\mathcodechecked#1{\ifcsname math#1code\endcsname\lastnamedcs\else#1\fi}
+
+% \startlines
+% $\mathopnolimits{\rm d}x$
+% $\mathopnolimits{\kern\zeropoint \rm d}x$
+% $\mathcodecommand{nolop}{\rm d}x$
+% $\mathcodecommand{nolop}{\kern\zeropoint\rm d}x$
+% \blank
+% $\mathcodecommand{nolop}{\mr d}x$
+% $\mathcodecommand{nolop}{\kern\zeropoint\mr d}x$
+% $\mathop{\kern\zeropoint\mr d}x$
+% $\mathopnolimits{\kern\zeropoint d}x$
+% \stoplines
+
+\installcorenamespace{mathcommand}
+
+% todo: define these commands as frozen!
+
+\permanent\tolerant\protected\def\definemathcommand[#1]#*[#2]#*[#3]#:#*#4% command class args meaning
+  {\ifparameter#3\or
+     \edef\scratchstringone{#3}% make this one m_arguments
+     \ifx\scratchstringone\v!one
+       \frozen\protected\defcsname\??mathcommand#1\endcsname##1{\mathcodecommand{#2}{#4{##1}}}%
+     \orelse\ifx\scratchstringone\v!two
+       \frozen\protected\defcsname\??mathcommand#1\endcsname##1##2{\mathcodecommand{#2}{#4{##1}{##2}}}%
+     \else
+       \frozen\protected\defcsname\??mathcommand#1\endcsname{\mathcodecommand{#2}{#4}}%
+     \fi
+   \orelse\ifparameter#2\or
+     \frozen\protected\defcsname\??mathcommand#1\endcsname{\mathcodecommand{#2}{#4}}%
+   \else
+     \frozen\protected\defcsname\??mathcommand#1\endcsname{\mathcodecommand{nothing}{#4}}%
+   \fi
+   \ifparameter#1\or % safeguard
+     \letcsname#1\expandafter\endcsname\csname\??mathcommand#1\endcsname
+   \fi}
+
+\permanent\protected\def\mathcommand#1%
+  {\begincsname\??mathcommand#1\endcsname}
+
+%D Let's define a few comands here:
+
+%definemathcommand [mathstrut]               {\vphantom{(}}
+%definemathcommand [joinrel]                 {\mathrel{\mkern-3mu}}
+\definemathcommand [joinrel]   [\s!relation] {\mkern-3mu}
+
+\immutable\chardef\c_math_strut"28
+
+%D For the evolution of these struts see the git repositories and older code in
+%D \MKIV\ and \MKI\ (commented code removed end April 2022).
+
+\let\math_strut_math_style\normalmathstyle
+
+% using \s!font \mathstylefontid\mathstyle\fam would needs expansion and guesswork
+
+\appendtoks
+    \Umathruleheight\alltextstyles        \strutheightfactor\fontspecifiedsize\textfont        \zerocount
+    \Umathruledepth \alltextstyles        \strutdepthfactor \fontspecifiedsize\textfont        \zerocount
+    \Umathruleheight\allscriptstyles      \strutheightfactor\fontspecifiedsize\scriptfont      \zerocount
+    \Umathruledepth \allscriptstyles      \strutdepthfactor \fontspecifiedsize\scriptfont      \zerocount
+    \Umathruleheight\allscriptscriptstyles\strutheightfactor\fontspecifiedsize\scriptscriptfont\zerocount
+    \Umathruledepth \allscriptscriptstyles\strutdepthfactor \fontspecifiedsize\scriptscriptfont\zerocount
+    \Umathruleheight\alldisplaystyles     \Umathruleheight\textstyle
+    \Umathruledepth \alldisplaystyles     \Umathruledepth \textstyle
+\to \everybodyfont
+
+\protected\def\math_strut
+  {\normalsrule
+     \s!width \zeropoint
+     \s!fam   \fam
+     \s!char  \c_math_strut
+   \relax}
+
+\permanent\protected\def\math_strut_height
+  {\normalsrule
+     \s!width \zeropoint
+     \s!depth \zeropoint
+     \s!fam   \fam
+     \s!char  \c_math_strut
+   \relax}
+
+\permanent\protected\def\math_strut_depth
+  {\normalsrule
+     \s!width \zeropoint
+     \s!height\zeropoint
+     \s!fam   \fam
+     \s!char  \c_math_strut
+   \relax}
+
+\permanent\protected\def\showmathstruts % let's not overload \math_strut_normal
+  {\showmakeup[strut]}
+
+\pushoverloadmode
+    \permanent\protected\def\mathstrut      {\math_strut}
+    \permanent\protected\def\mathheightstrut{\math_strut_height}
+    \permanent\protected\def\mathdepthstrut {\math_strut_depth}
+\popoverloadmode
+
+\permanent\protected\def\topstrut{\srule\s!width\zeropoint\s!height\strutht  \s!depth\zeropoint\relax}
+\permanent\protected\def\botstrut{\srule\s!width\zeropoint\s!height\zeropoint\s!depth\strutdp  \relax}
+
+\newdimen\mathstrutht
+\newdimen\mathstrutdp
+
+\appendtoks
+    \mathstrutht\strutht
+    \mathstrutdp\strutdp
+  % \writestatus{!!!!!!}{\the\mathstrutht,\the\mathstrutdp}%
+\to \everymathematics
+
+%D We could have a arg variant \unknown\ but not now.
+
+\permanent\protected\def\mathopwithlimits#1#2{\mathop{#1{#2}}\limits}
+\permanent\protected\def\stackrel        #1#2{\mathrel{\mathop{#2}\limits^{#1}}}
+
+%D Moved from font-ini.mkiv:
+%D
+%D \macros
+%D   {mf,mbox,enablembox,mathop}
+%D
+%D Todo:
+
+\permanent\protected\def\mf{\begincsname\fontalternative\endcsname} % todo: \frozen
+
+% \let\normalmathop\mathop % already defined
+
+\permanent\protected\def\normalmbox
+  {\normalhbox\bgroup
+   \usemathematicsstyleandcolor\c!textstyle\c!textcolor % new
+   \dowithnextboxcs\math_mbox_finish\normalhbox}
+
+\def\math_mbox_finish
+  {\flushnextbox
+   \egroup}
+
+\permanent\protected\def\mbox % we cannot add \dontleavehmode ... else no \setbox0\mbox possible
+  {\ifmmode\normalmbox\else\normalhbox\fi}
+
+\permanent\protected\def\enablembox
+  {\toksapp\everymathematics{\math_enable_mbox}}
+
+\permanent\def\math_enable_mbox % brrrr
+  {\enforced\let\hbox\mbox}
+
+\permanent\protected\def\snappedmath#1% sort of \struttedbox
+  {\dontleavehmode
+   \begingroup
+   \setbox\scratchbox\normalhbox\bgroup
+     \startimath#1\stopimath
+   \egroup
+   \ht\scratchbox\strutht
+   \dp\scratchbox\strutdp
+   \box\scratchbox
+   \endgroup}
+
+\permanent\protected\def\mtext#1%
+  {\text{\usemathematicsstyleandcolor\c!textstyle\c!textcolor#1}}
+
+%D The next hack is needed needed for sine, cosine etc.
+
+\aliased\let\mathfunction\firstofoneunexpanded
+
+\let\math_tags_function         \firstofoneunexpanded
+\let\math_tags_functionlabeltext\mathlabeltext
+
+\let\math_tags_mo\firstofoneunexpanded
+\let\math_tags_mi\firstofoneunexpanded
+
+\protected\def\math_tags_mn#1{\begingroup\math_upright\math_set_o_both#1\endgroup}
+\protected\def\math_tags_ms#1{\begingroup\math_upright\math_set_p_both#1\endgroup} % why not just \text
+
+% Once this is stable we can store the number at the tex end which is
+% faster. Functions getnumbers >= 1000.
+
+% \setupmathematics[functionstyle=normal] % will give ligatures and kerning
+
+\setupmathematics
+  [\c!textstyle=,     % rm ss etc i.e. known alternatives, otherwise math
+   \c!textcolor=,
+   \c!functionstyle=, % rm ss etc i.e. known alternatives, otherwise math
+   \c!functioncolor=]
+
+% in char-def:
+%
+%
+% \Umathcode"2061 = \mathghostcode \zerocount "2061 % \applyfunction
+% \Umathcode"2062 = \mathghostcode \zerocount "2062 % \invisibletimes
+% \Umathcode"2063 = \mathghostcode \zerocount "2063 % \invisiblecomma
+% \Umathcode"2064 = \mathghostcode \zerocount "2063 % \invisibleplus
+
+%D For previous variants of the function styling you can check the git repository
+%D end April 2022.
+
+\protected\def\math_function_handle#1#2#3%
+  {\begingroup
+   \getdummyparameters[\c!mathlimits=,#1]%
+   \edef\p_limits{\dummyparameter\c!mathlimits}%
+   \mathatom
+        mathfont
+        class \mathfunctioncode
+        \ifx\p_limits\v!no
+          nolimits
+        \orelse\ifx\p_limits\v!yes
+          limits
+        \orelse\ifx\p_limits\v!auto
+          nolimits
+          limits
+        \fi
+     \bgroup % textfont
+       \math_tags_mfunctionlab{#3}\c_apply_function
+       \usemathematicscolorparameter\c!functioncolor
+       \edef\p_functionstyle{\mathematicsparameter\c!functionstyle}%
+       \ifempty\p_functionstyle
+         \expandafter\math_upright
+       \orelse\ifcsname\??alternativestyle\p_functionstyle\endcsname
+         \expandafter\lastnamedcs
+       \else
+         \expandafter\p_functionstyle
+       \fi
+       #2{#3}%
+     \egroup
+   \endgroup}
+
+\permanent\tolerant\protected\def\mfunction         [#1]{\math_function_handle{#1}\firstofoneargument}
+\permanent\tolerant\protected\def\mfunctionlabeltext[#1]{\math_function_handle{#1}\mathlabeltext}
+
+\permanent\tolerant\protected\def\definemathfunction[#1]#*[#2]%
+  {\frozen\protected\defcsname#1\endcsname{\math_function_handle{#2}\mathlabeltext{#1}}}
+
+\let\math_tags_mfunctiontxt\gobbletwoarguments
+\let\math_tags_mfunctionlab\gobbletwoarguments
+
+\permanent\protected\def\math_tags_mo_indeed#1{\begingroup             \c_attr_mathcategory\plusone                  #1\endgroup}
+\permanent\protected\def\math_tags_mi_indeed#1{\begingroup             \c_attr_mathcategory\plustwo                  #1\endgroup}
+\permanent\protected\def\math_tags_mn_indeed#1{\begingroup\math_upright\c_attr_mathcategory\plusthree\math_set_o_both#1\endgroup}
+\permanent\protected\def\math_tags_ms_indeed#1{\begingroup\math_upright\c_attr_mathcategory\plusfour \math_set_p_both#1\endgroup} % todo: mathoptext
+
+\newconditional\c_apply_function
+
+\permanent\protected\def\math_tags_apply#1#2%
+  {\begingroup
+   \settrue\c_apply_function
+   #1%
+   \endgroup
+   \begingroup
+   % todo: auto ()
+   #2%
+   \endgroup}
+
+\ifdefined\apply \else \aliased\let\apply\relax \fi
+
+\mutable\let\mo\relax
+\mutable\let\mi\relax
+\mutable\let\mn\relax
+\mutable\let\ms\relax
+
+\appendtoks
+    \enforced\let\math_tags_mfunctiontxt\clf_tagmfunctiontxt
+    \enforced\let\math_tags_mfunctionlab\clf_tagmfunctionlab
+    \enforced\let\math_tags_mo          \math_tags_mo_indeed
+    \enforced\let\math_tags_mi          \math_tags_mi_indeed
+    \enforced\let\math_tags_mn          \math_tags_mn_indeed
+    \enforced\let\math_tags_ms          \math_tags_ms_indeed
+\to \everyenableelements
+
+\appendtoks
+    \enforced\let\mo   \math_tags_mo
+    \enforced\let\mi   \math_tags_mi
+    \enforced\let\mn   \math_tags_mn
+    \enforced\let\ms   \math_tags_ms
+    \enforced\let\apply\math_tags_apply
+\to\everymathematics
+
+\mutable\def\currentmscaledstyle{rm} % will be plugged into the typeface text=ss option
+
+\permanent\protected\def\mscaledtext#1%
+  {\mathchoice
+     {\hbox{\csname\currentmscaledstyle\endcsname\tf  #1}}
+     {\hbox{\csname\currentmscaledstyle\endcsname\tf  #1}}
+     {\hbox{\csname\currentmscaledstyle\endcsname\tfx #1}}
+     {\hbox{\csname\currentmscaledstyle\endcsname\tfxx#1}}}
+
+\permanent\protected\def\setmathfunctionstyle#1%
+  {\setupmathematics[\c!functionstyle=#1]} % for old times sake
+
+%D Usage:
+%D
+%D \starttyping
+%D \setmathfunctionstyle\fontstyle % or {rm} or {ss} or ..
+%D \rm test $\sin{(x^{\sin(x^{\sin(x)})})}$ test
+%D \ss test $\sin{(x^{\sin(x^{\sin(x)})})}$ test
+%D \tt test $\sin{(x^{\sin(x^{\sin(x)})})}$ test
+%D \stoptyping
+
+%D \macros
+%D   {nonknuthmode, donknuthmode}
+%D
+%D The underscore is frequently used in manuals but unfortunately \TEX\ prefers
+%D it to be a math specific character. And since computer modern fonts didn't
+%D have an underscore, one had to use commands to fake one. Nowadays we do
+%D have underscores in latin modern, and since all other fonts have them, we
+%D decided to get away from the restriction to use the underscore character in
+%D text mode.
+%D
+%D \starttyping
+%D \def\test#1{#1}
+%D
+%D \nonknuthmode $x_2$ x_2 \test{$x_2$} \test{x_2}
+%D
+%D \donknuthmode $x_2$ x_2 \test{$x_2$} \test{x_2}
+%D \stoptyping
+%D
+%D The result is as expected: the first line typesets ok, while the second one
+%D triggers an error message.
+
+\setnewconstant\activemathcharcode "8000
+
+\newtoks\activatedmathcharacters
+
+\permanent\protected\def\activatemathcharacter#1%
+  {\appendtoks
+     \global\mathcode#1=\activemathcharcode
+   \to \activatedmathcharacters}
+
+\permanent\def\activatemathcharacters
+  {\the\activatedmathcharacters}
+
+% beware, not runtime, so has to happen at format generation
+
+\activatemathcharacter\circumflexasciicode
+\activatemathcharacter\underscoreasciicode
+%activatemathcharacter\ampersandasciicode
+
+% \permanent\def\normalmathaligntab{&}
+%
+% \appendtoks
+%     \edef\p_ampersand{\mathematicsparameter\s!ampersand}%
+%     \ifx\p_ampersand\v!normal
+%         \enforced\let\specialmathaligntab\normalmathaligntab
+%     \else
+%         \enforced\let\specialmathaligntab\mathampersand
+%     \fi
+% \to \everysetupmathematics
+
+%D A simplified version of this code is:
+%D
+%D \starttyping
+%D \catcode"26=12
+%D
+%D \bgroup
+%D     \global\mathcode"26="8000
+%D
+%D     \catcode"26=4
+%D
+%D     \xdef\normalmathaligntab{&}
+%D
+%D     \catcode"26=13
+%D
+%D     \global\everymath{\def&{\normalmathaligntab}}
+%D \egroup
+%D \stoptyping
+%D
+%D The following works okay:
+%D
+%D \starttyping
+%D A & B
+%D \stoptyping
+%D
+%D As does:
+%D
+%D \starttyping
+%D $A \Umathchar"2"0"26 B$
+%D \stoptyping
+%D
+%D But the next code:
+%D
+%D \starttyping
+%D $A \char"26 B$
+%D \stoptyping
+%D
+%D fails with: \type{Misplaced alignment tab character &} and here is the reason.
+%D
+%D When we have a letter or other category a check happens for an active character
+%D and when it has one then it gets expanded and fed back into the scanner (sort
+%D of).
+%D
+%D A \type {\char} is also fed back as raw character and again when it's letter of
+%D other goes through the same process.
+%D
+%D This means that we cannot have a definition like:
+%D
+%D \starttyping
+%D \def\AND{\char"26\relax}
+%D \stoptyping
+%D
+%D that can be used in math mode, which is why the cweb macros do:
+%D
+%D \starttyping
+%D \def\AND{\def\AND{\mathchar"2026\relax}\AND}
+%D \stoptyping
+%D
+%D Maybe we need an option to treat chars like chars.
+
+%D The commented prime related code (dating from \MKII\ times has been removed in
+%D April 2022 but it's in the archives. In \LUAMETATEX\ primes are part of the
+%D machinery and additional magic (as in \MKIV) happens elsewhere. There is no
+%D need to remember old stuff because \MKII\ times are long gone.
+
+\ifdefined \prime \else
+    \Umathchardef\prime "0 "0 "2032
+\fi
+
+%D We also dropped th eoption to let ampersands be alignment tabs. That has never
+%D been a \CONTEXT\ option anyway.
+
+\bgroup
+
+    \catcode\underscoreasciicode\activecatcode
+    \catcode\circumflexasciicode\activecatcode
+  % \catcode\ampersandasciicode \activecatcode
+
+    \aliased\glet\specialmathaligntab\normalmathaligntab
+
+    \permanent\protected\gdef\obeymathcatcodes{%
+        \enforced\let _\normalsubscript
+        \enforced\let ^\normalsuperscript
+      % \enforced\def &\specialmathaligntab
+    }
+
+    \doglobal\appendtoks
+        \enforced\let _\normalsubscript
+        \enforced\let ^\normalsuperscript
+      % \enforced\let &\specialmathaligntab
+    \to \everymathematics
+
+\egroup
+
+%D We keep this, just for the fun of it:
+
+\newtoks\everydonknuthmode
+\newtoks\everynonknuthmode
+
+\newconditional \knuthmode
+
+\aliased\let\nonknuthmode\relax % no longer needed in MkIV
+\aliased\let\donknuthmode\relax % no longer needed in MkIV
+
+% \def\nonknuthmode
+%   {\pushcatcodetable
+%    \setcatcodetable\ctxcatcodes
+%    \the\everynonknuthmode
+%    \let\nonknuthmode\relax
+%    \popcatcodetable}
+%
+% \def\donknuthmode
+%   {\pushcatcodetable
+%    \setcatcodetable\ctxcatcodes
+%    \the\everydonknuthmode
+%    \popcatcodetable}
+%
+% \bgroup
+%
+%     \catcode\underscoreasciicode\activecatcode
+%     \catcode\circumflexasciicode\activecatcode
+%     \catcode\ampersandasciicode \activecatcode
+%
+%     \global \everynonknuthmode {\appendtoks
+%         \let_\normalsubscript
+%         \let^\normalsuperscript
+%         \let&\normalmathaligntab % use \def when it's \aligntab
+%     \to \everymathematics}
+%
+% \egroup
+%
+% \appendtoks
+%     \setfalse\knuthmode
+%     \catcode\underscoreasciicode\othercatcode
+%     \catcode\circumflexasciicode\othercatcode
+%     \catcode\ampersandasciicode \othercatcode
+% \to \everynonknuthmode
+%
+% \appendtoks
+%     \settrue\knuthmode
+%     \catcode\underscoreasciicode\subscriptcatcode
+%     \catcode\circumflexasciicode\superscriptcatcode
+%     \catcode\ampersandasciicode \alignmentcatcode
+% \to \everydonknuthmode
+%
+% \appendtoks
+%     \startextendcatcodetable\ctxcatcodes
+%         \catcode\underscoreasciicode\othercatcode
+%         \catcode\circumflexasciicode\othercatcode
+%         \catcode\ampersandasciicode \othercatcode
+%     \stopextendcatcodetable
+% \to \everynonknuthmode
+%
+% \appendtoks
+%     \startextendcatcodetable\ctxcatcodes
+%         \catcode\underscoreasciicode\subscriptcatcode
+%         \catcode\circumflexasciicode\superscriptcatcode
+%         \catcode\ampersandasciicode \alignmentcatcode
+%     \stopextendcatcodetable
+% \to \everydonknuthmode
+
+%D Even more drastic (this code will move as nonknuthmode is default now)
+
+% \protected\def\enableasciimode
+%   {\ctxlua{resolvers.macros.enablecomment()}%
+%    \glet\enableasciimode\relax}
+%
+% \protected\def\asciimode
+%   {\catcodetable\txtcatcodes
+%    \enableasciimode
+%    \nonknuthmode}
+%
+% \protected\def\startasciimode
+%   {\pushcatcodetable
+%    \catcodetable\txtcatcodes
+%    \enableasciimode
+%    \nonknuthmode}
+%
+% \protected\def\stopasciimode
+%   {\popcatcodetable
+%    \ifconditional\knuthmode\else\donknuthmode\fi}
+
+\permanent\protected\def\enableasciimode
+  {\clf_enableasciimode} % relaxes itself
+
+\permanent\protected\def\asciimode
+  {\catcodetable\txtcatcodes
+   \clf_enableasciimode}
+
+\permanent\protected\def\startasciimode
+  {\pushcatcodetable
+   \catcodetable\txtcatcodes
+   \clf_enableasciimode}
+
+\permanent\protected\def\stopasciimode
+  {\popcatcodetable}
+
+%D Needed for unicode:
+
+\permanent\def\nulloperator{\mathortext{\mathop{\emptyhbox}}{\emptyhbox}}
+
+%D Memory saver:
+
+\def\math_basics_check_compact
+  {\doifelse{\mathematicsparameter\c!compact}\v!yes
+     \enabledirectives\disabledirectives[math.virtual.optional]}
+
+\appendtoks
+    \ifempty\currentmathematics
+        \math_basics_check_compact % less tracing
+    \fi
+\to \everysetupmathematics
+
+\setupmathematics
+  [\c!compact=\v!no]
+
+% \enabletrackers[typesetters.directions.math]
+
+%D Right||to||left typesetting in math is supported by the \type {align} parameter
+%D with as option the \type {bidi} parameter. Of course support for special symbols
+%D like square roots depends on the font as well. We probably need to mirror a few
+%D more characters.
+%D
+%D \startbuffer
+%D     \removeunwantedspaces
+%D     \m{   (  1 =   1)   }\quad
+%D     \m{   (123 = 123)   }\quad
+%D     \m{ a (  1 =   1) b }\quad
+%D     \m{ a (123 = 123) b }\quad
+%D     \m{ x = 123 y + (1 / \sqrt {x}) }
+%D \stopbuffer
+%D
+%D \typebuffer
+%D
+%D \starttabulate[|T|T||]
+%D \HL
+%D \NC align \NC bidi \NC                                                  \NC \NR
+%D \HL
+%D \NC l2r   \NC no   \NC \setupmathematics[bidi=no]            \getbuffer \NC \NR
+%D \NC l2r   \NC yes  \NC \setupmathematics[bidi=yes]           \getbuffer \NC \NR
+%D \NC r2l   \NC no   \NC \setupmathematics[align=r2l,bidi=no]  \getbuffer \NC \NR
+%D \NC r2l   \NC yes  \NC \setupmathematics[align=r2l,bidi=yes] \getbuffer \NC \NR
+%D \HL
+%D \stoptabulate
+
+% We will use proper constants when we go numbers instead of XXX.
+
+\newconditional\c_math_right_to_left
+
+\installcorenamespace{mathaligndirection}
+
+\defcsname\??mathaligndirection           r2l\endcsname{\settrue\c_math_right_to_left}
+\defcsname\??mathaligndirection\v!righttoleft\endcsname{\settrue\c_math_right_to_left}
+
+\appendtoks
+    \ifcsname\??mathaligndirection\mathematicsparameter\c!align\endcsname
+      \lastnamedcs
+    \else
+      \setfalse\c_math_right_to_left
+    \fi
+\to \everyswitchmathematics
+
+\protected\def\math_basics_synchronize_direction
+  {\mathdirection\ifconditional\c_math_right_to_left\directionrighttoleft\else\directionlefttoright\fi}
+
+% Not \everymathematics as it comes too late and I'm not in the mood for a mixed mode
+% kludge now (should be a property of beginmath nodes and passed to callbacks).
+
+\appendtoks
+    \math_basics_synchronize_direction
+\to \everyswitchmathematics
+
+% experimental (needed for an article)
+
+\installcorenamespace {mathbidi}
+
+\newcount\c_math_bidi
+
+\def\math_bidi_enable {\clf_setmathdirection\plusone  \relax\c_math_bidi\plusone}
+\def\math_bidi_disable{\clf_setmathdirection\zerocount\relax\c_math_bidi\attributeunsetvalue}
+
+\letcsname\??mathbidi\v!yes\endcsname\math_bidi_enable
+\letcsname\??mathbidi\v!no \endcsname\math_bidi_disable
+
+\appendtoks
+    \edef\p_bidi{\mathematicsparameter\c!bidi}% still needed ?
+    \ifcsname\??mathbidi\p_bidi\endcsname\lastnamedcs\else\math_bidi_disable\fi
+\to \everysetupmathematics
+
+\appendtoks
+    \c_attr_mathbidi\ifconditional\c_math_right_to_left\c_math_bidi\else\attributeunsetvalue\fi
+\to \everyswitchmathematics
+
+%D Delayed: greek.
+%D
+%D \starttyping
+%D \usetypescript[cambria]\setupbodyfont[cambria]
+%D \startTEXpage
+%D     $\alpha \mathgreekupright \alpha \mathgreekitalic \alpha$
+%D \stopTEXpage
+%D \stoptyping
+
+% [lc uc] normal (upright) = 2, italic = 3, none = 0/1
+
+% We can move the setting to the lua end and use abstract numbers instead
+% if funny ones here.
+
+\installcorenamespace{mathgreek}
+
+\newconstant\c_math_greek_attribute
+
+\defcsname\??mathgreek\v!none  \endcsname{1}
+\defcsname\??mathgreek\v!normal\endcsname{2}
+\defcsname\??mathgreek\v!italic\endcsname{3}
+
+\appendtoks
+    \edef\p_sygreek{\mathematicsparameter\s!sygreek}% still needed ?
+    \edef\p_lcgreek{\mathematicsparameter\s!lcgreek}% still needed ?
+    \edef\p_ucgreek{\mathematicsparameter\s!ucgreek}% still needed ?
+    \c_math_greek_attribute"% hex digits
+      \ifcsname\??mathgreek\p_sygreek\endcsname\lastnamedcs\else1\fi
+      \ifcsname\??mathgreek\p_lcgreek\endcsname\lastnamedcs\else1\fi
+      \ifcsname\??mathgreek\p_ucgreek\endcsname\lastnamedcs\else1\fi
+    \relax
+    \ifcase\c_math_greek_attribute
+      \c_math_greek_attribute\attributeunsetvalue
+    \fi
+\to \everyswitchmathematics
+
+% only used local
+
+\permanent\protected\def\mathgreekupright{\c_attr_mathgreek"222\relax}
+\permanent\protected\def\mathgreekitalic {\c_attr_mathgreek"333\relax}
+\permanent\protected\def\mathgreekdefault{\c_attr_mathgreek"000\relax}
+
+\aliased\let\mathgreeknormal\mathgreekupright
+\aliased\let\mathgreeknone  \mathgreekdefault
+
+\appendtoks
+    \c_attr_mathgreek\c_math_greek_attribute
+\to \everymathematics
+
+\setupmathematics
+  [\s!sygreek=\v!normal,
+   \s!lcgreek=\v!italic,
+   \s!ucgreek=\v!normal] % was: none
+
+%D Math collapsing (ligatures)
+
+\installcorenamespace{mathcollapsing}
+
+\setnewconstant\c_math_collapsing_attribute\attributeunsetvalue
+
+\letcsname\??mathcollapsing       1\endcsname\plusone              % specials
+\letcsname\??mathcollapsing       2\endcsname\plustwo              % specials + mathlist
+\letcsname\??mathcollapsing       3\endcsname\plusthree            % mathlist + specials
+\letcsname\??mathcollapsing\v!none \endcsname\attributeunsetvalue
+\letcsname\??mathcollapsing\v!reset\endcsname\attributeunsetvalue
+
+\def\math_collapsing_initialize
+  {\ifnum\c_math_collapsing_attribute=\attributeunsetvalue \else
+     \clf_initializemathcollapsing % one time
+     \glet\math_collapsing_initialize\relax
+   \fi}
+
+\appendtoks
+    \edef\p_collapsing{\mathematicsparameter\s!collapsing}%
+    \c_math_collapsing_attribute
+        \ifcsname\??mathcollapsing\p_collapsing\endcsname\lastnamedcs\else\attributeunsetvalue\fi
+    \relax
+\to \everyswitchmathematics % only in mathematics
+
+\appendtoks
+    \math_collapsing_initialize
+    \c_attr_mathcollapsing\c_math_collapsing_attribute
+\to \everymathematics
+
+\setupmathematics
+  [\s!collapsing=1] % so that we at least do primes
+
+%D Math italics (experiment)
+
+%D We need keys but what names to use and because we have hardcoded solution
+%D we can stick to numbers. At some point this will change because we can now
+%D control in in the engine and goodies per font.
+
+\installcorenamespace{mathitalics}
+
+\setnewconstant\c_math_italics_attribute\attributeunsetvalue
+
+\letcsname\??mathitalics       1\endcsname\plusone              % fontitalics
+\letcsname\??mathitalics       2\endcsname\plustwo              % fontdata
+\letcsname\??mathitalics       3\endcsname\plusthree            % quad based
+\letcsname\??mathitalics       4\endcsname\plusfour             % combination of 1 and 3
+\letcsname\??mathitalics \v!none\endcsname\attributeunsetvalue
+\letcsname\??mathitalics\v!reset\endcsname\attributeunsetvalue
+
+\def\math_italics_initialize
+  {\ifnum\c_math_italics_attribute=\attributeunsetvalue \else
+     \clf_initializemathitalics % one time
+     \glet\math_italics_initialize\relax
+   \fi}
+
+\appendtoks
+    \edef\p_italics{\mathematicsparameter\s!italics}%
+    \c_math_italics_attribute
+        \ifcsname\??mathitalics\p_italics\endcsname\lastnamedcs\else\attributeunsetvalue\fi
+    \relax
+  % \math_italics_initialize
+\to \everyswitchmathematics % only in mathematics
+
+\appendtoks
+    \math_italics_initialize
+    \c_attr_mathitalics\c_math_italics_attribute
+\to \everymathematics
+
+% \setupmathematics % done later
+%   [\s!italics=3] % 4 is probably better
+
+% looks nicer but can generate bogus csnames
+%
+% \setvalue{\??mathitalics1}{\math_italics_initialize\c_math_italics_attribute\plusone  } % fontitalics
+% \setvalue{\??mathitalics2}{\math_italics_initialize\c_math_italics_attribute\plustwo  } % fontdata
+% \setvalue{\??mathitalics3}{\math_italics_initialize\c_math_italics_attribute\plusthree} % quad based
+% \setvalue{\??mathitalics4}{\math_italics_initialize\c_math_italics_attribute\plusfour } % combination of 1 and 3
+%
+% \appendtoks
+%     \c_math_italics_attribute\attributeunsetvalue
+%     \csname\??mathitalics\mathematicsparameter\s!italics\endcsname
+% \to \everyswitchmathematics % only in mathematics
+
+%D Math kerns (experiment)
+
+\installcorenamespace{mathkernpairs}
+
+\setnewconstant\c_math_kernpairs_attribute\attributeunsetvalue % no real need for an extra constant
+
+\def\math_kernpairs_initialize
+  {\ifnum\c_math_kernpairs_attribute=\attributeunsetvalue \else
+     \clf_initializemathkernpairs % one time
+     \glet\math_kernpairs_initialize\relax
+   \fi}
+
+\appendtoks
+    \edef\p_kernpairs{\mathematicsparameter\s!kernpairs}%
+    \c_math_kernpairs_attribute\ifx\p_kernpairs\v!yes\plusone\else\attributeunsetvalue\fi\relax
+\to \everyswitchmathematics % only in mathematics
+
+\appendtoks
+    \math_kernpairs_initialize
+    \c_attr_mathkernpairs\c_math_kernpairs_attribute
+\to \everymathematics
+
+\setupmathematics
+  [\s!kernpairs=\v!no]
+
+%D \macros
+%D   {enablemathpunctuation,disablemathpunctuation}
+%D
+%D \startbuffer
+%D \enablemathpunctuation$(1,2) (1, 2) (1{,}2) \hbox{foo, not bar}$
+%D \stopbuffer
+%D
+%D \typebuffer
+%D
+%D \blank{\getbuffer}\blank
+
+% \newconditional\automathpunctuation
+%
+% \protected\def\enablemathpunctuation {\settrue \automathpunctuation}
+% \protected\def\disablemathpunctuation{\setfalse\automathpunctuation}
+%
+% \appendtoks
+%     \doifelse{\mathematicsparameter\v!autopunctuation}\v!yes\settrue\setfalse\automathpunctuation
+% \to \everyswitchmathematics
+%
+% \setupmathematics
+%   [\v!autopunctuation=\v!no]
+%
+% \def\math_punctuation_next{\ifx\nexttoken\blankspace\signalcharacter\fi}
+%
+% \protected\def\math_punctuation_comma {\textcomma \futurelet\nexttoken\math_punctuation_next}
+% \protected\def\math_punctuation_period{\textperiod\futurelet\nexttoken\math_punctuation_next}
+%
+% \setnewconstant\c_math_comma  "002C
+% \setnewconstant\c_math_period "002E
+% \setnewconstant\c_math_special"8000
+%
+% \bgroup
+%
+%     \catcode\c_math_comma \activecatcode
+%     \catcode\c_math_period\activecatcode
+%
+%     \protected\gdef\math_punctuation_initialize_indeed
+%       {\mathcode\c_math_comma \c_math_special
+%        \mathcode\c_math_period\c_math_special
+%        \let,\math_punctuation_comma
+%        \let.\math_punctuation_period
+%        \c_attr_mathpunctuation\plustwo}
+%
+%     \protected\gdef\math_punctuation_initialize_yes
+%       {\c_attr_mathpunctuation\plustwo}
+%
+%     \protected\gdef\math_punctuation_initialize_nop
+%       {\c_attr_mathpunctuation\plusone}
+%
+% \egroup
+%
+% \appendtoks
+%     \ifconditional\automathpunctuation
+%       \math_punctuation_initialize_indeed
+%       \math_punctuation_initialize_yes
+%       \let\enablemathpunctuation \math_punctuation_initialize_yes
+%       \let\disablemathpunctuation\math_punctuation_initialize_nop
+%     \fi
+% \to \everymathematics
+
+% Later I will look again into a \LUATEX\ based solution. It only makes sense
+% to delegate to \LUA\ when we have more variants and need analysis (experimental
+% trickery removed for a while).
+
+% \def\math_punctuation_comma_next {\ifx\nexttoken\blankspace\mathpunct\else\mathord\fi{\textcomma }}
+% \def\math_punctuation_period_next{\ifx\nexttoken\blankspace\mathpunct\else\mathord\fi{\textperiod}}
+%
+% \protected\def\math_punctuation_nop_comma {\mathpunct{\textcomma}}
+% \protected\def\math_punctuation_nop_period{\mathord{\textperiod}}
+%
+% \protected\def\math_punctuation_all_comma {\futurelet\nexttoken\math_punctuation_comma_next}
+% \protected\def\math_punctuation_all_period{\futurelet\nexttoken\math_punctuation_period_next}
+%
+%            \let\math_punctuation_yes_comma \math_punctuation_all_comma
+%            \let\math_punctuation_yes_period\math_punctuation_nop_period
+%
+% The next one is more efficient as it produces more flat noad lists for numbers.
+
+\setnewconstant\c_math_comma    "002C
+\setnewconstant\c_math_period   "002E
+%setnewconstant\c_math_colon    "003A
+\setnewconstant\c_math_semicolon"003B
+\setnewconstant\c_math_special  "8000
+
+% todo: use \Umathclass\c_math_comma\mathpunctcode etc for temporary switching
+
+\def\math_set_o_comma    {\Umathcode\c_math_comma    \mathordcode  \zerocount\c_math_comma}
+\def\math_set_p_comma    {\Umathcode\c_math_comma    \mathpunctcode\zerocount\c_math_comma}
+\def\math_set_o_period   {\Umathcode\c_math_period   \mathordcode  \zerocount\c_math_period}
+\def\math_set_p_period   {\Umathcode\c_math_period   \mathpunctcode\zerocount\c_math_period}
+\def\math_set_o_semicolon{\Umathcode\c_math_semicolon\mathordcode  \zerocount\c_math_semicolon}
+\def\math_set_p_semicolon{\Umathcode\c_math_semicolon\mathpunctcode\zerocount\c_math_semicolon}
+
+\edef\math_set_o_both {\math_set_o_period\math_set_o_comma}
+\edef\math_set_p_both {\math_set_p_period\math_set_p_comma}
+
+\protected\def\math_punctuation_nop_comma    {\begingroup\math_set_p_comma    ,\endgroup}
+\protected\def\math_punctuation_nop_period   {\begingroup\math_set_o_period   .\endgroup}
+\protected\def\math_punctuation_nop_semicolon{\begingroup\math_set_p_semicolon;\endgroup}
+
+% todo: use new lookahead stuff
+
+\protected\def\math_punctuation_all_comma    {\futurelet\nexttoken\math_punctuation_comma_next}
+\protected\def\math_punctuation_all_period   {\futurelet\nexttoken\math_punctuation_period_next}
+\protected\def\math_punctuation_all_semicolon{\futurelet\nexttoken\math_punctuation_semicolon_next}
+
+          \let\math_punctuation_yes_comma    \math_punctuation_all_comma
+          \let\math_punctuation_yes_period   \math_punctuation_nop_period
+          \let\math_punctuation_yes_semicolon\math_punctuation_all_semicolon
+
+\def\math_punctuation_comma_next    {\begingroup\Umathcode\c_math_comma    \ifx\nexttoken\blankspace\mathordcode\else\mathordcode\fi\zerocount\c_math_comma    ,\endgroup}
+\def\math_punctuation_period_next   {\begingroup\Umathcode\c_math_period   \ifx\nexttoken\blankspace\mathordcode\else\mathordcode\fi\zerocount\c_math_period   .\endgroup}
+\def\math_punctuation_semicolon_next{\begingroup\Umathcode\c_math_semicolon\ifx\nexttoken\blankspace\mathordcode\else\mathordcode\fi\zerocount\c_math_semicolon;\endgroup}
+
+\installcorenamespace {mathautopunctuation}
+
+\bgroup
+
+    % This can adn will be replaced by classes:
+
+    \catcode\c_math_comma    \activecatcode
+    \catcode\c_math_period   \activecatcode
+    \catcode\c_math_semicolon\activecatcode
+
+    \gdefcsname\??mathautopunctuation\v!no\endcsname
+      {\let,\math_punctuation_nop_comma
+       \let.\math_punctuation_nop_period
+       \let;\math_punctuation_nop_semicolon}
+
+  %  more efficient list:
+  %
+  %  \gdefcsname\??mathautopunctuation\v!no\endcsname
+  %    {\Umathcode\c_math_period\mathordcode  \zerocount\c_math_period
+  %     \Umathcode\c_math_comma \mathpunctcode\zerocount\c_math_comma }
+
+    \gdefcsname\??mathautopunctuation\v!yes\endcsname
+      {\let,\math_punctuation_yes_comma
+       \let.\math_punctuation_yes_period
+       \let;\math_punctuation_nop_semicolon}
+
+    \gdefcsname\??mathautopunctuation\v!all\endcsname
+      {\let,\math_punctuation_all_comma
+       \let.\math_punctuation_all_period
+       \let;\math_punctuation_nop_semicolon}
+
+    \gdefcsname\??mathautopunctuation comma\endcsname
+      {\let,\math_punctuation_yes_comma
+       \let.\math_punctuation_yes_period
+       \let;\math_punctuation_nop_semicolon}
+
+    \gdefcsname\??mathautopunctuation\v!yes\string,semicolon\endcsname
+      {\let,\math_punctuation_yes_comma
+       \let.\math_punctuation_yes_period
+       \let;\math_punctuation_yes_semicolon}
+
+    \gdefcsname\??mathautopunctuation comma\string,semicolon\endcsname
+      {\let,\math_punctuation_yes_comma
+       \let.\math_punctuation_yes_period
+       \let;\math_punctuation_yes_semicolon}
+
+    \gdefcsname\??mathautopunctuation\v!all\string,semicolon\endcsname
+      {\let,\math_punctuation_all_comma
+       \let.\math_punctuation_all_period
+       \let;\math_punctuation_all_semicolon}
+
+\egroup
+
+% \appendtoks
+%     \global\mathcode\c_math_comma    \c_math_special
+%     \global\mathcode\c_math_period   \c_math_special
+%     \global\mathcode\c_math_semicolon\c_math_special
+% \to \everyjob
+
+% \activatemathcharacter\c_math_comma
+% \activatemathcharacter\c_math_period
+% \activatemathcharacter\c_math_semicolon
+
+\appendtoks
+    \mathcode\c_math_comma    \c_math_special
+    \mathcode\c_math_period   \c_math_special
+    \mathcode\c_math_semicolon\c_math_special
+    \begincsname\??mathautopunctuation\mathematicsparameter\v!autopunctuation\endcsname
+\to \everymathematics
+
+\appendtoks
+    \ifcsname\??mathautopunctuation\mathematicsparameter\v!autopunctuation\endcsname \else
+        \letmathematicsparameter\v!autopunctuation\v!no
+    \fi
+\to \everysetupmathematics
+
+\permanent\protected\def\enablemathpunctuation {\csname\??mathautopunctuation\v!no \endcsname}
+\permanent\protected\def\disablemathpunctuation{\csname\??mathautopunctuation\v!yes\endcsname}
+
+\setupmathematics
+  [\v!autopunctuation=\v!no] % no | yes | all | comma | yes,semicolon | all,semicolon
+
+%D The consequences of setting this are as follows:
+%D
+%D \def\TestA#1#2#3%
+%D   {\ifnum#1=0 \type{#2}\else\setupmathematics[autopunctuation={#2}]$#3$\fi}
+%D \def\TestB#1#2%
+%D   {\NC \TestA{#1}{no}           {#2}
+%D    \NC \TestA{#1}{yes}          {#2}
+%D    \NC \TestA{#1}{yes,semicolon}{#2}
+%D    \NC \TestA{#1}{all}          {#2}
+%D    \NC \TestA{#1}{all,semicolon}{#2}
+%D    \NC \NR}
+%D \starttabulate[|c|c|c|c|c|]
+%D     \TestB{0}{}
+%D     \TestB{1}{(1,2)=(1, 2)}
+%D     \TestB{1}{(1.2)=(1. 2)}
+%D     \TestB{1}{(1;2)=(1; 2)}
+%D \stoptabulate
+
+%D \macros
+%D   {mathstyle}
+%D
+%D If one want to be sure that something is typeset in the appropriate style, \type
+%D {\mathstyle} can be used:
+%D
+%D \starttyping
+%D \mathstyle{something}
+%D \stoptyping
+
+% \def\mathstyle#1%
+%   {\mathchoice
+%      {\displaystyle     #1}%
+%      {\textstyle        #1}%
+%      {\scriptstyle      #1}%
+%      {\scriptscriptstyle#1}}
+%
+% We now have a primitive operation for this. As the macro overloads a new
+% primitive introduced in \LUATEX, we need to use \type {\normalmathstyle} when we
+% consult the current math style.
+%
+% \let \mathstyle \Ustack % spoils cramped
+%
+% \let \mathstyle \firstofoneargument
+%
+% 0 = display
+% 1 = crampeddisplay
+% 2 = text
+% 3 = crampedtext
+% 4 = script
+% 5 = crampedscript
+% 6 = scriptscript
+% 7 = crampedscriptscript
+
+\permanent\def\uncramped#1%
+  {\beginmathgroup
+   \ifmathstyle
+    \or \displaystyle      \or
+    \or \textstyle         \or
+    \or \scriptstyle       \or
+    \or \scriptscriptstyle \fi
+   #1%
+   \endmathgroup}
+
+\permanent\def\cramped#1%
+  {\beginmathgroup
+   \ifmathstyle
+    \crampeddisplaystyle      \or \or % 0 -> 1
+    \crampedtextstyle         \or \or % 2 -> 3
+    \crampedscriptstyle       \or \or % 4 -> 5
+    \crampedscriptscriptstyle \fi     % 6 -> 7
+   #1%
+   \endmathgroup}
+
+\permanent\def\triggermathstyle#1{\Ustyle\numexpr#1\relax}
+%permanent\def\mathstyletrigger#1{\numexpr#1\relax}
+\permanent\let\mathstyletrigger   \firstofoneargument
+
+\def\triggeredmathstyle#1{\Ustyle\numexpr\number#1\relax} % expandable
+
+\permanent\def\triggeredmathstyleparameter#1% to bypass the relax
+  {\ifcase\numexpr\normalmathstyle\relax
+     #1\displaystyle             \or % 0
+     #1\crampeddisplaystyle      \or % 1
+     #1\textstyle                \or % 2
+     #1\crampedtextstyle         \or % 3
+     #1\scriptstyle              \or % 4
+     #1\crampedscriptstyle       \or % 5
+     #1\scriptscriptstyle        \or % 6
+     #1\crampedscriptscriptstyle \else
+     % error
+   \fi}
+
+\permanent\def\mathstylefont#1% #1 is number (\normalmathstyle)
+  {\ifcase\numexpr#1\relax
+     \textfont         \or
+     \textfont         \or
+     \textfont         \or
+     \textfont         \or
+     \scriptfont       \or
+     \scriptfont       \or
+     \scriptscriptfont \or
+     \scriptscriptfont \else
+     \textfont
+   \fi\fam} % was \zerocount
+
+\permanent\def\somemathstylefont#1% #1 is number (\normalmathstyle)
+  {\ifcase\numexpr#1\relax
+     \textfont         \or
+     \textfont         \or
+     \textfont         \or
+     \textfont         \or
+     \scriptfont       \or
+     \scriptfont       \or
+     \scriptscriptfont \or
+     \scriptscriptfont \else
+     \textfont
+   \fi}
+
+\permanent\def\mathsmallstylefont#1% #1 is number (\normalmathstyle)
+  {\ifcase\numexpr#1\relax
+     \scriptfont       \or
+     \scriptfont       \or
+     \scriptfont       \or
+     \scriptfont       \or
+     \scriptscriptfont \or
+     \scriptscriptfont \or
+     \scriptscriptfont \or
+     \scriptscriptfont \else
+     \scriptfont
+   \fi\fam} % was \zerocount
+
+\permanent\def\mathstyleface#1% #1 is number (\normalmathstyle)
+  {\ifcase\numexpr#1\relax
+     \textface         \or
+     \textface         \or
+     \textface         \or
+     \textface         \or
+     \scriptface       \or
+     \scriptface       \or
+     \scriptscriptface \or
+     \scriptscriptface \else
+     \textface
+   \fi}
+
+% \permanent\def\mathstyleface#1% #1 is number (\normalmathstyle)
+%   {\mathstylefont#1\relax}
+
+\permanent\def\mathsmallstyleface#1% #1 is number (\normalmathstyle)
+  {\ifcase\numexpr#1\relax
+     \scriptface       \or
+     \scriptface       \or
+     \scriptface       \or
+     \scriptface       \or
+     \scriptscriptface \or
+     \scriptscriptface \or
+     \scriptscriptface \or
+     \scriptscriptface \else
+     \scriptface
+   \fi}
+
+% \permanent\def\mathsmallstyleface#1% #1 is number (\normalmathstyle)
+%   {\mathstylefont\ifcase\numexpr#1\relax
+%      \scriptstyle       \or
+%      \scriptstyle       \or
+%      \scriptstyle       \or
+%      \scriptstyle       \or
+%      \scriptscriptstyle \or
+%      \scriptscriptstyle \or
+%      \scriptscriptstyle \or
+%      \scriptscriptstyle \else
+%      \scriptstyle
+%    \fi}
+
+\permanent\def\mathstylecommand#1#2#3%
+  {\ifcase\numexpr\normalmathstyle\relax
+     \expandafter#1\or
+     \expandafter#1\or
+     \expandafter#1\or
+     \expandafter#1\or
+     \expandafter#2\or
+     \expandafter#2\or
+     \expandafter#3\or
+     \expandafter#3\else
+     \expandafter#1\fi}
+
+% \permanent\def\textstyleface#1% #1 is number (\normalmathstyle)
+%   {\ifcase\numexpr#1\relax
+%      \tf   \or
+%      \tf   \or
+%      \tf   \or
+%      \tf   \or
+%      \tfx  \or
+%      \tfx  \or
+%      \tfxx \or
+%      \tfxx \else
+%      \tf
+%    \fi}
+
+\permanent\protected\def\verbosemathstyle#1% #1 is number (\normalmathstyle)
+  {{\normalexpanded{\relax\darkgray\ttxx[\number#1:\ifcase\numexpr#1\relax
+                display\or   % 0
+         crampeddisplay\or   % 1
+                   text\or   % 2
+            crampedtext\or   % 3
+                 script\or   % 4
+          crampedscript\or   % 5
+           scriptscript\or   % 6
+    crampedscriptscript\else % 7
+                unknown\fi]}}}
+
+\permanent\protected\def\showmathstyle{\verbosemathstyle\normalmathstyle}
+
+%D Handy too:
+
+\permanent\def\mathcharwd{\fontcharwd\mathstylefont\normalmathstyle}
+\permanent\def\mathcharht{\fontcharht\mathstylefont\normalmathstyle}
+\permanent\def\mathchardp{\fontchardp\mathstylefont\normalmathstyle}
+
+%D Some dimension fun:
+
+\aliased  \let\mathexheight \exheight                   % also in math-ini.mkiv
+\permanent\def\mathemwidth {\Umathquad\normalmathstyle} % also in math-ini.mkiv
+
+%D A plain inheritance:
+
+\permanent\def\mathpalette#1#2%
+  {\mathchoice
+     {#1\displaystyle     {#2}}%
+     {#1\textstyle        {#2}}%
+     {#1\scriptstyle      {#2}}%
+     {#1\scriptscriptstyle{#2}}}
+
+%D \macros
+%D    {cramedllap, crampedrlap, crampedclap}
+%D
+%D In many cases, one wants to use the \tex {clap} macro in math mode while using
+%D subscripts. Normally, subscripts are in cramped mode, and these macros allow you
+%D to go to cramped mode. For example:
+%D
+%D \startbuffer
+%D \startformula
+%D   \sum_{a^2 < b^2 < c^2} \quad
+%D   \sum_{\clap{a^2 < b^2 < c^2}} \quad
+%D   \sum_{\crampedclap{a^2 < b^2 < c^2}}
+%D \stopformula
+%D \stopbuffer
+%D
+%D \start
+%D   \typebuffer
+%D   \switchtobodyfont[24pt]
+%D   \getbuffer
+%D \stop
+%D
+%D This used to be in \type {supp-math.mkxl}:
+
+\permanent\protected\def\crampedllap#1{\llap{\cramped#1}}
+\permanent\protected\def\crampedrlap#1{\rlap{\cramped#1}}
+\permanent\protected\def\crampedclap#1{\clap{\cramped#1}}
+
+%D Often we can use:
+%D
+%D \startbuffer
+%D $x^{\mathstylehbox{x^{\mathstylehbox{x}}}}$
+%D \stopbuffer
+%D
+%D \typebuffer \getbuffer
+
+% to be tested: {#1} but it could have side effects
+
+\permanent\protected\def\mathstylehbox#1#% sensitive for: a \over b => {a\over b} or \frac{a}{b}
+  {\math_style_hbox{#1}}
+
+\protected\def\math_style_hbox#1#2% sensitive for: a \over b => {a\over b} or \frac{a}{b}
+  {\normalexpanded{\hbox#1\bgroup
+     \startimath\triggeredmathstyle\normalmathstyle}\mathsurround\zeropoint#2\stopimath\egroup}
+
+% adaptive variant:
+%
+% \protected\def\math_style_hbox#1#2% sensitive for: a \over b => {a\over b} or \frac{a}{b}
+%   {\normalexpanded{\setbox\scratchbox\hbox#1\bgroup
+%   \mathbeginclass\lastrightclass
+%   \startimath\Ustyle\the\mathstyle\relax}%
+%      \mathsurround\zeropoint#2\stopimath\egroup
+%      \box\scratchbox
+%   \mathrightclass\lastrightclass   }
+
+\permanent\protected\def\mathstylevbox#1%
+  {\normalexpanded{\vbox\bgroup
+     \startimath\triggeredmathstyle\normalmathstyle}\mathsurround\zeropoint#1\stopimath\egroup}
+
+\permanent\protected\def\mathstylevcenter#1%
+  {\normalexpanded{\vcenter\bgroup
+     \startimath\triggeredmathstyle\normalmathstyle}\mathsurround\zeropoint#1\stopimath\egroup}
+
+\permanent\protected\def\mathstylevcenteredhbox#1%
+  {\normalexpanded{\vcenter\bgroup\hbox\bgroup
+     \startimath\triggeredmathstyle\normalmathstyle}\mathsurround\zeropoint#1\stopimath\egroup\egroup}
+
+\permanent\protected\def\mathstylevcenteredvbox#1%
+  {\normalexpanded{\vcenter\bgroup\vbox\bgroup
+     \startimath\triggeredmathstyle\normalmathstyle}\mathsurround\zeropoint#1\stopimath\egroup\egroup}
+
+\permanent\protected\def\setmathsmalltextbox#1#2#%
+  {\normalizebodyfontsize\m_math_text_choice_face{\mathsmallstyleface\normalmathstyle}%
+   \setbox#1#2\bgroup
+     \font_basics_switchtobodyfont\m_math_text_choice_face
+     \let\next}
+
+\permanent\protected\def\setmathtextbox#1#2#%
+  {\normalizebodyfontsize\m_math_text_choice_face{\mathstyleface\normalmathstyle}%
+   \setbox#1#2\bgroup
+     \font_basics_switchtobodyfont\m_math_text_choice_face
+     \let\next}
+
+%D Here is the new mechanism ... it might replace some of the above but we will do
+%D that stepwise. Keep in mind that cramped only affects superscripts and even then,
+%D only when in a smaller size than normal.
+%D
+%D \def\TestMe#1%
+%D   {\NC \ttbf #1
+%D    \NC \ruledhbox{$\setupmathstyle[#1]x + x_j^2 + x_i^{e^2} + \frac{1}{x}$}
+%D    \NC \ruledhbox{$\setupmathstyle[#1,small]x + x_j^2 + x_i^{e^2} + \frac{1}{x}$}
+%D    \NC \NR}
+%D
+%D \starttabulate[|l|r|l|]
+%D \HL
+%D \NC \NC \NC \ttbf ...,small \NC \NR
+%D \HL
+%D \TestMe{text}         \TestMe{text,cramped}
+%D \TestMe{script}       \TestMe{script,cramped}
+%D \TestMe{scriptscript} \TestMe{scriptscript,cramped}
+%D \TestMe{display}      \TestMe{display,cramped}
+%D \HL
+%D \stoptabulate
+
+\permanent\def\triggerdisplaystyle
+  {\ifmathstyle
+     \displaystyle        \or
+     \crampeddisplaystyle \or
+     \displaystyle        \or
+     \crampeddisplaystyle \or
+     \displaystyle        \or
+     \crampeddisplaystyle \or
+     \displaystyle        \or
+     \crampeddisplaystyle \or
+   \fi}
+
+\permanent\def\triggertextstyle
+  {\ifmathstyle
+     \textstyle        \or
+     \crampedtextstyle \or
+     \textstyle        \or
+     \crampedtextstyle \or
+     \textstyle        \or
+     \crampedtextstyle \or
+     \textstyle        \or
+     \crampedtextstyle \else
+   \fi}
+
+\permanent\def\triggerscriptstyle
+  {\ifmathstyle
+     \scriptstyle        \or
+     \crampedscriptstyle \or
+     \scriptstyle        \or
+     \crampedscriptstyle \or
+     \scriptstyle        \or
+     \crampedscriptstyle \or
+     \scriptstyle        \or
+     \crampedscriptstyle \or
+   \fi}
+
+\permanent\def\triggerscriptscriptstyle
+  {\ifmathstyle
+     \scriptscriptstyle        \or
+     \crampedscriptscriptstyle \or
+     \scriptscriptstyle        \or
+     \crampedscriptscriptstyle \or
+     \scriptscriptstyle        \or
+     \crampedscriptscriptstyle \or
+     \scriptscriptstyle        \or
+     \crampedscriptscriptstyle \or
+   \fi}
+
+\permanent\def\triggeruncrampedstyle
+  {\ifmathstyle
+    \or \displaystyle      \or
+    \or \textstyle         \or
+    \or \scriptstyle       \or
+    \or \scriptscriptstyle \fi}
+
+\permanent\def\triggercrampedstyle
+  {\ifmathstyle
+   \crampeddisplaystyle      \or \or
+   \crampedtextstyle         \or \or
+   \crampedscriptstyle       \or \or
+   \crampedscriptscriptstyle \fi}
+
+\permanent\def\triggersmallstyle
+  {\ifmathstyle
+     \scriptstyle              \or
+     \crampedscriptstyle       \or
+     \scriptstyle              \or
+     \crampedscriptstyle       \or
+     \scriptscriptstyle        \or
+     \crampedscriptscriptstyle \or
+     \scriptscriptstyle        \or
+     \crampedscriptscriptstyle \or
+    \fi}
+
+\permanent\def\triggeruncrampedsmallstyle
+  {\ifmathstyle
+     \scriptstyle       \or
+     \scriptstyle       \or
+     \scriptstyle       \or
+     \scriptstyle       \or
+     \scriptscriptstyle \or
+     \scriptscriptstyle \or
+     \scriptscriptstyle \or
+     \scriptscriptstyle \or
+    \fi}
+
+\permanent\def\triggercrampedsmallstyle
+  {\ifmathstyle
+     \crampedscriptstyle       \or
+     \crampedscriptstyle       \or
+     \crampedscriptstyle       \or
+     \crampedscriptstyle       \or
+     \crampedscriptscriptstyle \or
+     \crampedscriptscriptstyle \or
+     \crampedscriptscriptstyle \or
+     \crampedscriptscriptstyle \or
+    \fi}
+
+\permanent\def\triggerbigstyle
+  {\ifmathstyle
+     \displaystyle        \or
+     \crampeddisplaystyle \or
+     \textstyle           \or
+     \crampedtextstyle    \or
+     \textstyle           \or
+     \crampedtextstyle    \or
+     \scriptstyle         \or
+     \crampedscriptstyle  \or
+    \fi}
+
+\permanent\def\triggeruncrampedbigstyle
+  {\ifmathstyle
+     \displaystyle \or
+     \displaystyle \or
+     \textstyle    \or
+     \textstyle    \or
+     \textstyle    \or
+     \textstyle    \or
+     \scriptstyle  \or
+     \scriptstyle  \or
+    \fi}
+
+\permanent\def\triggercrampedbigstyle
+  {\ifmathstyle
+     \crampeddisplaystyle \or
+     \crampeddisplaystyle \or
+     \crampedtextstyle    \or
+     \crampedtextstyle    \or
+     \crampedtextstyle    \or
+     \crampedtextstyle    \or
+     \crampedscriptstyle  \or
+     \crampedscriptstyle  \or
+    \fi}
+
+\newcount\c_math_saved_style
+
+\permanent\protected\def\pushmathstyle % assumes begingroup .. endgroup
+  {\c_math_saved_style\mathstyle}
+
+\permanent\protected\def\popmathstyle
+  {\ifnum\mathstyle=\c_math_saved_style\else
+     \triggermathstyle\c_math_saved_style
+   \fi}
+
+\installcorenamespace{mathstylecommand}
+\installcorenamespace{mathstylecache}
+
+\newconstant\c_math_styles_state_style
+\newconstant\c_math_styles_state_cramped
+\newconstant\c_math_styles_state_size
+
+\def\math_style_add_to_cache_choice {%
+  \ifcase\c_math_styles_state_size
+    \ifcase\c_math_styles_state_style
+        \ifcase\c_math_styles_state_cramped
+        \relax                               \or
+        \noexpand\triggeruncrampedstyle      \or
+        \noexpand\triggercrampedstyle        \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerdisplaystyle        \or
+        \displaystyle                        \or
+        \crampeddisplaystyle                 \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggertextstyle           \or
+        \textstyle                           \or
+        \crampedtextstyle                    \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptstyle         \or
+        \scriptstyle                         \or
+        \crampedscriptstyle                  \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptscriptstyle   \or
+        \scriptscriptstyle                   \or
+        \crampedscriptscriptstyle            \fi
+    \fi
+  \or % small
+    \ifcase\c_math_styles_state_style
+        \ifcase\c_math_styles_state_cramped
+        \noexpand\triggersmallstyle          \or
+        \noexpand\triggeruncrampedsmallstyle \or
+        \noexpand\triggercrampedsmallstyle   \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptstyle         \or
+        \scriptstyle                         \or
+        \crampedscriptstyle                  \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptstyle         \or
+        \scriptstyle                         \or
+        \crampedscriptstyle                  \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptscriptstyle   \or
+        \scriptscriptstyle                   \or
+        \crampedscriptscriptstyle            \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptscriptstyle   \or
+        \scriptscriptstyle                   \or
+        \crampedscriptscriptstyle            \fi
+    \fi
+  \or % large
+    \ifcase\c_math_styles_state_style
+        \ifcase\c_math_styles_state_cramped
+        \noexpand\triggerbigstyle            \or
+        \noexpand\triggeruncrampedbigstyle   \or
+        \noexpand\triggercrampedbigstyle     \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerdisplaystyle        \or
+        \displaystyle                        \or
+        \crampeddisplaystyle                 \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggertextstyle           \or
+        \textstyle                           \or
+        \crampedtextstyle                    \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggertextstyle           \or
+        \textstyle                           \or
+        \crampedtextstyle                    \fi
+    \or\ifcase\c_math_styles_state_cramped
+        \noexpand\triggerscriptstyle         \or
+        \scriptstyle                         \or
+        \crampedscriptstyle                  \fi
+    \fi
+  \fi
+}
+
+\permanent\def\installmathstyle#1#2%
+  {\ifcsname\??mathstylecommand#1\endcsname \else
+     \defcsname\??mathstylecommand#1\endcsname{#2}%
+   \fi}
+
+\def\math_style_collect#1%
+  {\csname\??mathstylecommand#1\endcsname}
+
+\defcsname\??mathstylecommand\s!display     \endcsname{\c_math_styles_state_style  \plusone}
+\defcsname\??mathstylecommand\s!text        \endcsname{\c_math_styles_state_style  \plustwo}
+\defcsname\??mathstylecommand\s!script      \endcsname{\c_math_styles_state_style  \plusthree}
+\defcsname\??mathstylecommand\s!scriptscript\endcsname{\c_math_styles_state_style  \plusfour}
+
+\defcsname\??mathstylecommand\s!uncramped   \endcsname{\c_math_styles_state_cramped\plusone}
+\defcsname\??mathstylecommand\s!cramped     \endcsname{\c_math_styles_state_cramped\plustwo}
+\defcsname\??mathstylecommand\v!normal      \endcsname{\c_math_styles_state_cramped\plusone}
+\defcsname\??mathstylecommand\v!packed      \endcsname{\c_math_styles_state_cramped\plustwo}
+
+\defcsname\??mathstylecommand\v!small       \endcsname{\c_math_styles_state_size   \plusone}
+\defcsname\??mathstylecommand\v!big         \endcsname{\c_math_styles_state_size   \plustwo}
+
+%D \startbuffer
+%D \definemathstyle[mystyle][scriptscript]
+%D
+%D $text\startmathstyle[mystyle]scriptscript\stopmathstyle text$
+%D \stopbuffer
+%D
+%D \typebuffer \blank \start \getbuffer \stop \blank
+
+% maybe move this to the lua end ...
+
+\installcorenamespace {mathstyle}
+
+\letcsname\??mathstyle     \endcsname\empty
+\letcsname\??mathstylecache\endcsname\empty
+
+\def\math_style_set_indeed
+  {\ifcsname\??mathstyle\m_math_style_asked\endcsname
+     \lastnamedcs
+   \orelse\ifcsname\??mathstylecache\m_math_style_asked\endcsname
+     \lastnamedcs
+   \else
+     \math_style_set_mathstyle_mathstylecache\m_math_style_asked
+   \fi}
+
+\permanent\def\expandedmathstyleparameter#1#2%
+  {\normalexpanded{\noexpand\math_style_set_expanded{#1#2}}}
+
+\def\math_style_set_expanded#1%
+  {\ifcsname\??mathstyle#1e\endcsname
+     \lastnamedcs
+   \orelse\ifcsname\??mathstylecache#1\endcsname
+     \lastnamedcs
+   \else
+     \math_style_set_mathstyle_mathstylecache{#1}%
+   \fi}
+
+\permanent\protected\def\usemathstyleparameter#1#2%
+  {\edef\m_math_style_asked{#1#2}%
+   \ifempty\m_math_style_asked \else
+     \math_style_set_indeed
+   \fi}
+
+\permanent\tolerant\protected\def\setmathstyle[#1]#;#=% so we accept [] and {}
+  {\edef\m_math_style_asked{#1\c!mathstyle}%
+   \ifempty\m_math_style_asked \else
+     \math_style_set_indeed
+   \fi}
+
+\permanent\protected\def\setupmathstyle[#1]%
+  {\edef\m_math_style_asked{#1}%
+   \ifempty\m_math_style_asked \else
+     \math_style_set_indeed
+   \fi}
+
+\def\math_style_set_mathstyle_mathstylecache#1%
+  {\beginlocalcontrol % so we can expand
+   \edef\m_math_style_asked{#1}%
+   \c_math_styles_state_style  \zerocount
+   \c_math_styles_state_cramped\zerocount
+   \c_math_styles_state_size   \zerocount
+   \rawprocesscommacommand[\m_math_style_asked]\math_style_collect
+   \gletcsname\??mathstylecache\m_math_style_asked\normalexpanded{\endcsname\math_style_add_to_cache_choice}%
+   \endlocalcontrol
+   \csname\??mathstylecache#1\endcsname}
+
+% \letcsname\??mathstyle     \??mathstyle     \endcsname\math_style_set_mathstyle_mathstyle      % still needed?
+% \letcsname\??mathstylecache\??mathstylecache\endcsname\math_style_set_mathstyle_mathstylecache % still needed?
+
+%D \startbuffer
+%D $x\begingroup\setupmathstyle[script]x\endgroup x$
+%D $x{\setupmathstyle[script]x}x$
+%D $x\startmathstyle[script]x\stopmathstyle x$
+%D \stopbuffer
+%D
+%D \typebuffer \getbuffer
+
+\permanent\protected\def\startmathstyle[#1]%
+  {\edef\m_math_style_asked{#1}%
+   \ifempty\m_math_style_asked
+     \enforced\aliased\let\stopmathstyle\relax
+   \else
+     \beginmathgroup % \bgroup
+     \math_style_set_indeed
+     \enforced\aliased\let\stopmathstyle\endmathgroup % \egroup
+   \fi}
+
+\aliased\let\stopmathstyle\relax
+
+\permanent\protected\def\startusemathstyleparameter#1#2%
+  {\edef\m_math_style_asked{#1#2}%
+   \ifempty\m_math_style_asked
+     \enforced\let\stopusemathstyleparameter\relax
+   \else
+     \beginmathgroup % \bgroup
+     \math_style_set_indeed
+     \enforced\let\stopusemathstyleparameter\endmathgroup % \egroup
+   \fi}
+
+\aliased\let\stopusemathstyleparameter\relax
+
+%D Something similar can be used in the (re|)|definition of \type {\text}. This
+%D version is a variation on the one in the math module (see \type{m-math} and|/|or
+%D \type {m-newmat}).
+
+\let\m_math_text_choice_face\relax
+
+%D We accept a low level box specification so that one can make helpers:
+%D
+%D \startbuffer
+%D \startformula
+%D     \startalign[m=2,align={middle}]
+%D         \NC \text to 6cm{One\hfill}           \NC a = 1 \NR
+%D         \NC \text to 6cm{One Two\hfill}       \NC b = 2 \NR
+%D         \NC \text to 6cm{One Two Three\hfill} \NC c = 3 \NR
+%D     \stopalign
+%D \stopformula
+%D \stopbuffer
+%D
+%D \typebuffer \getbuffer
+
+\def\math_text_choice_font#1#2#%
+  {\normalizebodyfontsize\m_math_text_choice_face{\mathstyleface\normalmathstyle}%
+   \hbox#2\bgroup
+   \bgroup
+   \aftergroup\hss
+   \aftergroup\egroup
+   \hss
+   \font_basics_switchtobodyfont\m_math_text_choice_face
+   #1%
+   \let\next}
+
+\def\math_text_choice_word#1#2#%
+  {\normalizebodyfontsize\m_math_text_choice_face{\mathstyleface\normalmathstyle}%
+   \hbox#2\bgroup
+   \bgroup
+   \aftergroup\hss
+   \aftergroup\egroup
+   \hss
+   \font_basics_switchtobodyfont\m_math_text_choice_face
+   #1%
+   \nospacing % \normalnospaces\plusone
+   \let\next}
+
+% \ruledhbox{$\mathtext{abc ffi}$}
+% \ruledhbox{$\mathword{abc ffi}$}
+
+% I need to decide:
+%
+%mathscriptboxmode    \zerocount % no kerning
+%mathscriptboxmode    \plusone   % lists
+\mathscriptboxmode    \plustwo   % lists and boxes
+\mathscriptcharmode   \plusone   % lists and boxes
+%mathscriptboxmode    \plusthree % lists and boxes with \boundary=1 (also for testing and demo)
+%mathrulethicknessmode\plusone   % adaptive
+
+\permanent\protected\def\mathtext  {\mathortext{\math_text_choice_font\relax}\hbox}
+\permanent\protected\def\mathword  {\mathortext{\math_text_choice_word\relax}\hbox}
+
+\permanent\protected\def\mathtexttf{\mathortext{\math_text_choice_font\tf}\hbox}
+\permanent\protected\def\mathtextit{\mathortext{\math_text_choice_font\it}\hbox}
+\permanent\protected\def\mathtextsl{\mathortext{\math_text_choice_font\sl}\hbox}
+\permanent\protected\def\mathtextbf{\mathortext{\math_text_choice_font\bf}\hbox}
+\permanent\protected\def\mathtextbi{\mathortext{\math_text_choice_font\bi}\hbox}
+\permanent\protected\def\mathtextbs{\mathortext{\math_text_choice_font\bs}\hbox}
+
+\permanent\protected\def\mathwordtf{\mathortext{\math_text_choice_word\tf}\hbox}
+\permanent\protected\def\mathwordit{\mathortext{\math_text_choice_word\it}\hbox}
+\permanent\protected\def\mathwordsl{\mathortext{\math_text_choice_word\sl}\hbox}
+\permanent\protected\def\mathwordbf{\mathortext{\math_text_choice_word\bf}\hbox}
+\permanent\protected\def\mathwordbi{\mathortext{\math_text_choice_word\bi}\hbox}
+\permanent\protected\def\mathwordbs{\mathortext{\math_text_choice_word\bs}\hbox}
+
+%D Safeguard against redefinitions:
+
+\appendtoks
+    \enforced\let\_\normalunderscore % is textunderscore or fakeunderscore
+\to \everymathematics
+
+%D Because we may overload \type {\text} in other (structuring) macros, we say:
+
+\appendtoks
+    \enforced\let\text\mathtext
+\to \everymathematics
+
+\newcount\interdisplaylinepenalty \interdisplaylinepenalty\plushundred
+
+%D Text in math:
+
+\permanent\protected\def\mathortext
+  {\ifmmode
+     \expandafter\firstoftwoarguments
+   \else
+     \expandafter\secondoftwoarguments
+   \fi}
+
+% \defineactivecharacter _ {\mathortext{_}{\_}} text_text  $a^2$
+
+% force text mode, will be overloaded later
+
+\ifdefined\text\else \aliased\let\text\hbox \fi
+
+% \protected\def\mathoptext#1{\mathop{\text{#1}}}
+
+\permanent\protected\def\mathoptext
+  {\normalizebodyfontsize\m_math_text_choice_face{\mathstyleface\normalmathstyle}%
+  %\showmathstyle
+   \dowithnextbox
+     {\mathop{\box\nextbox}}%
+     \hbox\bgroup\font_basics_switchtobodyfont\m_math_text_choice_face\let\next}
+
+% new:
+
+% \startsetups math:morespacing
+%     \Umathordordspacing\textstyle 1mu plus .5mu minus .25mu\relax
+% \stopsetups
+%
+% \setupmathematics
+%   [setups=math:morespacing]
+
+\appendtoks
+    \edef\p_setups{\mathematicsparameter\c!setups}%
+    \ifempty\p_setups\else
+        \directsetup\p_setups
+    \fi
+\to \everyswitchmathematics
+
+% new:
+
+\permanent\protected\def\smallmathsymbol#1%
+  {\mathematics{\mathbin{\normalexpanded{\raise.15\exheight\hbox{\normalstartimath
+     \triggeredmathstyle{\the\numexpr\normalmathstyle+2\relax}#1%
+   \normalstopimath}}}}}
+
+% this should be a primitive:
+
+\permanent\def\mathextensiblecode#1#2{\clf_extensiblecode\numexpr#1\relax\numexpr#2\relax} % todo: use public lua but needs testing
+\permanent\def\mathhorizontalcode#1#2{\clf_horizontalcode\numexpr#1\relax\numexpr#2\relax} % todo: use public lua but needs testing
+
+% experimental:
+
+%D \starttyping
+%D \enabletrackers[math.openedup]
+%D
+%D \dorecurse{10}{\dorecurse{#1}{whatever }}
+%D
+%D \startitemize[packed]
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D \stopitemize
+%D \startitemize[packed,columns]
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D \stopitemize
+%D
+%D \dorecurse{5}{\dorecurse{#1}{whatever }\openedupimath{\frac{1}{2}} }
+%D
+%D \startitemize[packed,columns]
+%D     \startitem whatever \openedupimath{1+2} whatever
+%D     \startitem whatever \openedupimath{1+2} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{1+2} whatever
+%D     \startitem whatever \openedupimath{1+2} whatever
+%D \stopitemize
+%D
+%D \dorecurse{5}{\dorecurse{#1}{whatever }\openedupimath{1+2} }
+%D
+%D \startitemize[packed]
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D     \startitem whatever \openedupimath{\frac{1}{2}} whatever
+%D \stopitemize
+%D
+%D \dorecurse{10}{whatever }
+%D \dorecurse {5}{\dorecurse{#1}{whatever }\openedupimath{\frac{1}{2}} }
+%D \dorecurse{10}{whatever }
+%D \stoptyping
+
+\def\m_math_inline_openup_ht{\dimexpr\ifinsidecolumns\strutdp\else\lineheight\fi/\plusfour\relax}
+\def\m_math_inline_openup_dp{\dimexpr\ifinsidecolumns\strutdp\else\lineheight\fi/\plusfour\relax}
+
+% \def\m_math_inline_openup_ht{\dimexpr\lineheight/\ifinsidecolumns\pluseight\else\plusfour\fi\relax}
+% \def\m_math_inline_openup_dp{\dimexpr\lineheight/\ifinsidecolumns\pluseight\else\plusfour\fi\relax}
+
+\installtextracker
+  {math.openedup}
+  {\let\math_inline_openup_start_yes\math_inline_openup_traced_start}
+  {\let\math_inline_openup_start_yes\math_inline_openup_normal_start}
+
+\protected\def\math_inline_openup_normal_start
+  {\scratchheight\dimexpr\ht\scratchbox+\m_math_inline_openup_ht\relax
+   \scratchdepth \dimexpr\dp\scratchbox+\m_math_inline_openup_dp\relax
+   \vrule\s!width\zeropoint\s!height\scratchheight\s!depth\scratchdepth\relax
+   \begingroup
+   \let\math_inline_openup_stop\math_inline_openup_normal_stop}
+
+\protected\def\math_inline_openup_normal_stop
+   {\endgroup
+    \vrule\s!width\zeropoint\s!height\scratchheight\s!depth\scratchdepth\relax}
+
+\protected\def\math_inline_openup_traced_start
+  {\scratchtopoffset   \ht\scratchbox
+   \scratchbottomoffset\dp\scratchbox
+   \scratchheight      \dimexpr\scratchtopoffset   +\m_math_inline_openup_ht\relax
+   \scratchdepth       \dimexpr\scratchbottomoffset+\m_math_inline_openup_dp\relax
+   \vrule\s!width\zeropoint\s!height\scratchheight\s!depth\scratchdepth\relax
+   \begingroup
+     \dousecolorparameter{darkred}%
+     \vrule\s!width\emwidth\s!height\scratchheight\s!depth-\scratchtopoffset\relax
+   \endgroup
+   \kern-\emwidth
+   \begingroup
+   \let\math_inline_openup_stop\math_inline_openup_traced_stop}
+
+\protected\def\math_inline_openup_traced_stop
+  {\endgroup
+   \kern-\emwidth
+   \begingroup
+     \dousecolorparameter{darkblue}%
+     \vrule\s!width\emwidth\s!height-\scratchbottomoffset\s!depth\scratchdepth\relax
+   \endgroup
+   \vrule\s!width\zeropoint\s!height\scratchheight\s!depth\scratchdepth\relax}
+
+\let\math_inline_openup_start_yes\math_inline_openup_normal_start
+\let\math_inline_openup_stop     \relax
+
+\def\math_inline_openup_start_nop
+  {\let\math_inline_openup_stop\relax}
+
+\permanent\protected\def\openedupimath
+  {\dontleavehmode
+   \begingroup
+   \ifmmode
+     \expandafter\openedupimath_math
+   \else
+     \expandafter\openedupimath_text
+   \fi}
+
+\protected\def\openedupimath_math#1%
+  {\setbox\scratchbox\mathstylehbox{#1}%
+   \ifdim\ht\scratchbox>\strutht
+     \math_inline_openup_start_yes
+   \orelse\ifdim\dp\scratchbox>\strutdp
+     \math_inline_openup_start_yes
+   \else
+     \math_inline_openup_start_nop
+   \fi
+   #1%
+   \math_inline_openup_stop
+   \endgroup}
+
+\protected\def\openedupimath_text#1%
+  {\setbox\scratchbox\hbox{\startimath#1\stopimath}%
+   \ifdim\ht\scratchbox>\strutht
+     \math_inline_openup_start_yes
+   \orelse\ifdim\dp\scratchbox>\strutdp
+     \math_inline_openup_start_yes
+   \else
+     \math_inline_openup_start_nop
+   \fi
+   \startimath
+   #1%
+   \stopimath
+   \math_inline_openup_stop
+   \endgroup}
+
+% Also handy, especially for units:
+%
+% 0x002B=plus 0x2212=minus 0x2013=endash
+
+\permanent\protected\def\mathplus     {+}
+\permanent\protected\def\mathminus    {\ifmmode –\orelse\iffontchar\font`−−\else –\fi}
+\permanent\protected\def\mathplusminus{±}
+
+%D The \type {\displaywidth} is only known inside a display formula, so we need to catch
+%D it when still zero.
+
+\permanent\def\checkeddisplaywidth % hsize if zero
+  {\dimexpr
+     \ifzeropt\displaywidth
+       \hsize
+     \else
+       \displaywidth
+     \fi
+   \relax}
+
+\permanent\def\maximizeddisplaywidth % larger than zero but within hsize
+  {\dimexpr
+     \ifzeropt\displaywidth
+       \hsize
+     \orelse\ifdim\displaywidth>\hsize
+        \hsize
+     \else
+       \displaywidth
+     \fi
+   \relax}
+
+%D Experiment: (todo: same switch as italic, using \type {\everyswitchmathematics}).
+
+\newcount\c_math_domain_attribute
+
+\def\math_domain_initialize
+  {\ifnum\c_math_domain_attribute=\attributeunsetvalue \else
+     \clf_initializemathdomain % one time
+     \glet\math_domain_initialize\relax
+   \fi}
+
+\appendtoks
+    \edef\p_domain{\mathematicsparameter\c!domain}%
+    \ifempty\p_domain
+        \c_math_domain_attribute\attributeunsetvalue
+    \else
+        \c_math_domain_attribute\clf_getmathdomain\p_domain\relax
+        \math_domain_initialize
+    \fi
+\to \everyswitchmathematics % only in mathematics
+
+\appendtoks
+    \c_attr_mathdomain\c_math_domain_attribute
+\to \everymathematics
+
+\setupmathematics
+  [\s!italics=3] % for the moment only this one makes sense .. still experimental
+
+%D For special purposed we set this one:
+
+\installcorenamespace{mathrules}
+
+\permanent\protected\def\enablemathrules{\letgvalue{\??mathrules\fontclass}\plusone}
+
+\appendtoks
+    \mathrulesmode\ifcsname\??mathrules\fontclass\endcsname
+      \lastnamedcs
+    \else
+      \zerocount
+    \fi
+    \mathrulesfam\zerocount
+\to \everymathematics
+
+%D Maybe:
+
+% \starttabulate[|||c|c|]
+% \BC positive                            \BC negative                               \BC text                           \BC math \NC \NR
+% \NC \tex {f1} \tex {hairspace}  \tex{,} \NC \tex {b1} \tex {neghairspace}          \NC {\darkred\vl}\f1{\darkblue\vl} \NC ${\darkred\vl}\f1{\darkblue\vl}$ \NC \NR
+% \NC \tex {f2} \tex {thinspace}  \tex{:} \NC \tex {b2} \tex {negthinspace}  \tex{!} \NC {\darkred\vl}\f2{\darkblue\vl} \NC ${\darkred\vl}\f2{\darkblue\vl}$ \NC \NR
+% \NC \tex {f3} \tex {medspace}   \tex{;} \NC \tex {b3} \tex {negmedspace}           \NC {\darkred\vl}\f3{\darkblue\vl} \NC ${\darkred\vl}\f3{\darkblue\vl}$ \NC \NR
+% \NC \tex {f4} \tex {thickspace}         \NC \tex {b4} \tex {negthickspace}         \NC {\darkred\vl}\f4{\darkblue\vl} \NC ${\darkred\vl}\f4{\darkblue\vl}$ \NC \NR
+% \NC \tex {f5} \tex {enspace}            \NC \tex {b5}                              \NC {\darkred\vl}\f5{\darkblue\vl} \NC ${\darkred\vl}\f5{\darkblue\vl}$ \NC \NR
+% \NC \tex {f6} \tex {emspace}            \NC \tex {b6}                              \NC {\darkred\vl}\f6{\darkblue\vl} \NC ${\darkred\vl}\f6{\darkblue\vl}$ \NC \NR
+% \stoptabulate
+
+% \protected\def\negenspace{\kern-.5\emwidth}
+% \protected\def\negemspace{\kern-  \emwidth}
+%
+% \protected\def\math_f#1%
+%   {\ifcase#1\or
+%      \hairspace
+%    \or
+%      \thinspace
+%    \or
+%      \medspace
+%    \or
+%      \thickspace
+%    \or
+%      \enspace
+%    \or
+%      \emspace
+%    \fi}
+%
+% \protected\def\math_b#1%
+%   {\ifcase#1\or
+%      \neghairspace
+%    \or
+%      \negthinspace
+%    \or
+%      \negmedspace
+%    \or
+%      \negthickspace
+%    \or
+%      \negenspace
+%    \or
+%      \negemspace
+%    \fi}
+%
+% \appendtoks
+%     \let\f\math_f
+%     \let\b\math_b
+% \to \everymathematics
+
+%D Experiment
+
+\permanent\protected\def\math_scripts_stack
+  {\c_attr_mathunstack\attributeunsetvalue}
+
+\permanent\protected\def\math_scripts_unstack
+  {\clf_enablescriptunstacking
+   \c_attr_mathunstack\plusone}
+
+\ifdefined\stackscripts   \else \aliased\let\stackscripts  \relax \fi
+\ifdefined\unstackscripts \else \aliased\let\unstackscripts\relax \fi
+
+\appendtoks
+    \enforced\let\stackscripts  \math_scripts_stack
+    \enforced\let\unstackscripts\math_scripts_unstack
+\to \everymathematics
+
+%D Expensive (tracing and inject) but a primitive (using factors) is tricky as we
+%D want this frozen support.
+
+% \def\math_openup_parameter#1#2%
+%   {\ifzeropt#1\displaystyle            \orelse\ifdim#1\displaystyle            =\maxdimen\else\frozen#1\displaystyle            #2#1\displaystyle            \fi
+%    \ifzeropt#1\crampeddisplaystyle     \orelse\ifdim#1\crampeddisplaystyle     =\maxdimen\else\frozen#1\crampeddisplaystyle     #2#1\crampeddisplaystyle     \fi
+%    \ifzeropt#1\textstyle               \orelse\ifdim#1\textstyle               =\maxdimen\else\frozen#1\textstyle               #2#1\textstyle               \fi
+%    \ifzeropt#1\crampedtextstyle        \orelse\ifdim#1\crampedtextstyle        =\maxdimen\else\frozen#1\crampedtextstyle        #2#1\crampedtextstyle        \fi
+%    \ifzeropt#1\scriptstyle             \orelse\ifdim#1\scriptstyle             =\maxdimen\else\frozen#1\scriptstyle             #2#1\scriptstyle             \fi
+%    \ifzeropt#1\crampedscriptstyle      \orelse\ifdim#1\crampedscriptstyle      =\maxdimen\else\frozen#1\crampedscriptstyle      #2#1\crampedscriptstyle      \fi
+%    \ifzeropt#1\scriptscriptstyle       \orelse\ifdim#1\scriptscriptstyle       =\maxdimen\else\frozen#1\scriptscriptstyle       #2#1\scriptscriptstyle       \fi
+%    \ifzeropt#1\crampedscriptscriptstyle\orelse\ifdim#1\crampedscriptscriptstyle=\maxdimen\else\frozen#1\crampedscriptscriptstyle#2#1\crampedscriptscriptstyle\fi}
+
+% \def\mdim#1#2%
+%   {\ifcase\ifzeropt#1#2\plusone\orelse\ifdim#1#2=\maxdimen\plusone\else\zerocount\fi}
+%
+% \def\mdim
+%   {\afterassignment\mmdim\scratchdimen}
+%
+% \def\mmdim
+%   {\ifcase\ifzeropt\scratchdimen\plusone\orelse\ifdim\scratchdimen=\maxdimen\plusone\else\zerocount\fi}
+%
+% \def\math_openup_parameter#1#2%
+%   {\ifcondition\mdim#1\displaystyle            \frozen#1\displaystyle            #2\dimexpr#1\displaystyle            \relax\fi
+%    \ifcondition\mdim#1\crampeddisplaystyle     \frozen#1\crampeddisplaystyle     #2\dimexpr#1\crampeddisplaystyle     \relax\fi
+%    \ifcondition\mdim#1\textstyle               \frozen#1\textstyle               #2\dimexpr#1\textstyle               \relax\fi
+%    \ifcondition\mdim#1\crampedtextstyle        \frozen#1\crampedtextstyle        #2\dimexpr#1\crampedtextstyle        \relax\fi
+%    \ifcondition\mdim#1\scriptstyle             \frozen#1\scriptstyle             #2\dimexpr#1\scriptstyle             \relax\fi
+%    \ifcondition\mdim#1\crampedscriptstyle      \frozen#1\crampedscriptstyle      #2\dimexpr#1\crampedscriptstyle      \relax\fi
+%    \ifcondition\mdim#1\scriptscriptstyle       \frozen#1\scriptscriptstyle       #2\dimexpr#1\scriptscriptstyle       \relax\fi
+%    \ifcondition\mdim#1\crampedscriptscriptstyle\frozen#1\crampedscriptscriptstyle#2\dimexpr#1\crampedscriptscriptstyle\relax\fi}
+
+% \ifmathparameter : 0=zero, 1=set, 2=unset (les stracing clutter this way)
+
+%D New stuff:
+%D
+%D \starttyping
+%D $\mathopenupparameter\Umathradicalvgap{10.5}\sqrt[3]{x}$
+%D \stoptyping
+
+\permanent\protected\def\mathopenupparameter#1#2%
+  {\ifmathparameter#1\displaystyle            \or\frozen#1\displaystyle            #2#1\displaystyle            \fi
+   \ifmathparameter#1\crampeddisplaystyle     \or\frozen#1\crampeddisplaystyle     #2#1\crampeddisplaystyle     \fi
+   \ifmathparameter#1\textstyle               \or\frozen#1\textstyle               #2#1\textstyle               \fi
+   \ifmathparameter#1\crampedtextstyle        \or\frozen#1\crampedtextstyle        #2#1\crampedtextstyle        \fi
+   \ifmathparameter#1\scriptstyle             \or\frozen#1\scriptstyle             #2#1\scriptstyle             \fi
+   \ifmathparameter#1\crampedscriptstyle      \or\frozen#1\crampedscriptstyle      #2#1\crampedscriptstyle      \fi
+   \ifmathparameter#1\scriptscriptstyle       \or\frozen#1\scriptscriptstyle       #2#1\scriptscriptstyle       \fi
+   \ifmathparameter#1\crampedscriptscriptstyle\or\frozen#1\crampedscriptscriptstyle#2#1\crampedscriptscriptstyle\fi}
+
+%D New stuff:
+%D
+%D \startbuffer
+%D $x\mathopen   {!}+123+\mathclose  {!}x$
+%D $x\tomathopen  ! +123+\tomathclose ! x$
+%D $x\mathclose  {!}+123+\mathopen   {!}x$
+%D $x\tomathclose ! +123+\tomathopen  ! x$
+%D $x             ! +123+             ! x$
+%D \stopbuffer
+%D
+%D \typebuffer
+%D
+%D \startlines
+%D \getbuffer
+%D \stoplines
+
+\permanent\protected\def\tomathord  {\Umathclass\zerocount}
+\permanent\protected\def\tomathop   {\Umathclass\plusone  } % \mathinfix
+\permanent\protected\def\tomathbin  {\Umathclass\plustwo  }
+\permanent\protected\def\tomathrel  {\Umathclass\plusthree}
+\permanent\protected\def\tomathopen {\Umathclass\plusfour } % \mathprefix
+\permanent\protected\def\tomathclose{\Umathclass\plusfive } % \mathsuffix
+\permanent\protected\def\tomathpunct{\Umathclass\plussix  }
+
+%D Prescripts. These work in \CONTEXT\ because we have the super- and subscript
+%D triggers enabled as active characters but when we would have
+%D
+%D \starttyping
+%D \catcode\underscoreasciicode\subscriptcatcode
+%D \catcode\circumflexasciicode\superscriptcatcode
+%D \stoptyping
+%D
+%D we also need the next line to disable character escaping via \type {^} in
+%D math mode:
+%D
+%D \startbuffer
+%D \blank \hbox{
+%D     \ruledhbox{${\tf X} ^1 _2 ^^3 __4$}
+%D     \ruledhbox{${\tf X} ^1           $}
+%D     \ruledhbox{${\tf X}    _2        $}
+%D     \ruledhbox{${\tf X}       ^^3    $}
+%D     \ruledhbox{${\tf X}           __4$}
+%D     \ruledhbox{${\tf X} ^1 _2        $}
+%D     \ruledhbox{${\tf X} ^1    ^^3    $}
+%D     \ruledhbox{${\tf X} ^1        __4$}
+%D     \ruledhbox{${\tf X}    _2 ^^3    $}
+%D     \ruledhbox{${\tf X}    _2     __4$}
+%D     \ruledhbox{${\tf X} ^1 _2 ^^3    $}
+%D     \ruledhbox{${\tf X} ^1 _2     __4$}
+%D     \ruledhbox{${\tf X}    _2 ^^3    $}
+%D     \ruledhbox{${\tf X}    _2 ^^3 __4$}
+%D     \ruledhbox{${\tf X}       ^^3 __4$}
+%D } \blank
+%D
+%D \typebuffer \getbuffer
+
+\normalsupmarkmode\plusone % 2 also disable ^[^+] in text mode
+
+\permanent\protected\tolerant\def\supscr[#1]#:#2%
+  {\ifchkdim#1\or\Umathopenupheight#1\relax\fi
+   \Usuperscript{#2}}
+
+\permanent\protected\tolerant\def\subscr[#1]#:#2%
+  {\ifchkdim#1\or\Umathopenupdepth #1\relax\fi
+   \Usubscript{#2}}
+
+\permanent\protected\tolerant\def\supsubscr[#1]#:#2#3%
+  {\ifchkdim#1\or\Umathopenupheight#1\relax\Umathopenupdepth#1\relax\fi
+   \Usuperscript{#2}\Usubscript{#3}}
+
+\permanent\protected\tolerant\def\subsupscr[#1]#:#*#2#3%
+  {\ifchkdim#1\or\Umathopenupheight#1\relax\Umathopenupdepth#1\relax\fi
+   \Usubscript{#2}\Usuperscript{#3}}
+
+\permanent\protected\tolerant\def\supprescr[#1]#:#2%
+  {\ifchkdim#1\or\Umathopenupheight#1\relax\fi
+   \Usuperprescript{#2}}
+
+\permanent\protected\tolerant\def\subprescr[#1]#:#2%
+  {\ifchkdim#1\or\Umathopenupdepth #1\relax\fi
+   \Usubprescript{#2}}
+
+\permanent\protected\tolerant\def\supsubprescr[#1]#:#2#3%
+  {\ifchkdim#1\or\Umathopenupheight#1\relax\Umathopenupdepth#1\relax\fi
+   \Usuperprescript{#2}\Usubprescript{#3}}
+
+\permanent\protected\tolerant\def\subsupprescr[#1]#:#*#2#3%
+  {\ifchkdim#1\or\Umathopenupheight#1\relax\Umathopenupdepth#1\relax\fi
+   \Usubprescript{#2}\Usuperprescript{#3}}
+
+%D For now (needed in asciimath):
+
+\def\math_relax_limits{\enforced\let\limits\relax}
+
+%D Something new:
+%D
+%D \starttyping
+%D \definemathpreset[whatever][factor=.5,style=all,list={fraction*gap}]
+%D % \presetmathematics[whatever] % less more zero
+%D \stoptyping
+%D
+%D as well as:
+%D
+%D \starttyping
+%D \setupmathspacing[narrow]
+%D \stoptyping
+
+\installcorenamespace{mathspacing}
+
+% \protected\def\math_spacing_set#1#2% maybe some day \allmathstyles
+%   {\relax
+%    #1\displaystyle       #2%
+%    #1\crampeddisplaystyle#2%
+%    #1\textstyle          #2%
+%    #1\scriptstyle        #2%
+%    #1\crampedscriptstyle #2%
+%    #1\scriptstyle        #2%
+%    #1\crampedscriptstyle #2%
+%    \relax}
+%
+% \permanent\tolerant\protected\def\definemathspacing[#1]#*[#2]#*[#3]%
+%   {\ifcstok{#2}\v!horizontal
+%      \edefcsname\??mathspacing#1\endcsname
+%        {\math_spacing_set\Umathxscale{\ifchknum#3\or#3\else\plusthousand\fi\relax}}%
+%    \orelse\ifcstok{#2}\v!vertical
+%      \edefcsname\??mathspacing#1\endcsname
+%        {\math_spacing_set\Umathyscale{\ifchknum#3\or#3\else\plusthousand\fi\relax}}%
+%    \else
+%      \edefcsname\??mathspacing#1\endcsname
+%        {\math_spacing_set\Umathxscale{\ifchknum#2\or\number#2\else\plusthousand\fi\relax}%
+%         \math_spacing_set\Umathyscale{\ifchknum#3\or\number#3\orelse\ifchknum#2\or\number#2\else\plusthousand\fi\relax}}%
+%    \fi}
+
+\permanent\tolerant\protected\def\definemathspacing[#1]#*[#2]#*[#3]%
+  {\ifcstok{#2}\v!horizontal
+     \edefcsname\??mathspacing#1\endcsname
+       {\Umathxscale\allmathstyles\ifchknum#3\or#3\else\plusthousand\fi\relax}%
+   \orelse\ifcstok{#2}\v!vertical
+     \edefcsname\??mathspacing#1\endcsname
+       {\Umathyscale\allmathstyles\ifchknum#3\or#3\else\plusthousand\fi\relax}%
+   \else
+     \edefcsname\??mathspacing#1\endcsname
+       {\Umathxscale\allmathstyles\ifchknum#2\or\number#2\else\plusthousand\fi\relax
+        \Umathyscale\allmathstyles\ifchknum#3\or\number#3\orelse\ifchknum#2\or\number#2\else\plusthousand\fi\relax}%
+   \fi}
+
+\definemathspacing[\v!normal]                [1000] [1000]
+\definemathspacing[\v!tight] [\c!vertical]    [900]
+\definemathspacing[\v!loose] [\c!vertical]   [1100]
+\definemathspacing[\v!narrow][\c!horizontal]  [900]
+\definemathspacing[\v!wide]  [\c!horizontal] [1100]
+\definemathspacing[\v!less]                   [900]  [900]
+\definemathspacing[\v!more]                  [1100] [1100]
+
+\permanent\protected\def\setupmathspacing[#1]%
+  {\begincsname\??mathspacing#1\endcsname}
+
+% \defcsname\??mathspacing +\endcsname
+%   {\expandedloop\zerocount\plusseven\plusone
+%      {\Umathxscale
+%         \the\currentloopiterator
+%         \numexpr\Umathxscale\the\currentloopiterator+\plushundred\relax
+%       \Umathyscale
+%         \the\currentloopiterator
+%         \numexpr\Umathxscale\the\currentloopiterator+\plushundred\relax}}
+%
+% \defcsname\??mathspacing -\endcsname
+%   {\expandedloop\zerocount\plusseven\plusone
+%      {\Umathxscale
+%         \the\currentloopiterator
+%         \numexpr\Umathxscale\the\currentloopiterator-\plushundred\relax
+%       \Umathyscale
+%         \the\currentloopiterator
+%         \numexpr\Umathxscale\the\currentloopiterator-\plushundred\relax}}
+
+% can become a lua call that globally defined it, then we can have
+% partials
+
+%D For now we define this here:
+
+\ifdefined\d \let\text_d\d \else \let\text_d\firstofoneargument \fi
+
+\pushoverloadmode
+
+    \permanent\protected\def\math_d{\mathatom unpack \mathdifferentialcode{d}}
+
+    \permanent\protected\def\d{\mathortext\math_d\text_d}
+
+\popoverloadmode
+
+\protect \endinput
+
+% % not used (yet)
+%
+% \newtoks \everystartimath
+% \newtoks \everystopimath
+%
+% \protected\def\startimath{\Ustartmath\the\everystartimath}
+% \protected\def\stopimath {\the\everystopimath\Ustopmath}
+%
+% \protected\def\m%
+%   {\relax
+%    \ifmmode\expandafter\math_m_stay\else\expandafter\math_m_math\fi}
+%
+% \protected\def\math_m_math#1%
+%   {\startimath#1\stopimath}
+%
+% \let\math_m_stay\firstofoneargument

@@ -1,0 +1,289 @@
+%D \module
+%D   [       file=mp-page.mpiv,
+%D        version=1999.03.10,
+%D          title=\CONTEXT\ \METAPOST\ graphics,
+%D       subtitle=page enhancements,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+%D This module is rather preliminary and subjected to changes.In the process of
+%D moving to \METAFUN2\ this might change.
+
+if known metafun_loaded_page : endinput ; fi ;
+
+newinternal boolean metafun_loaded_page ; metafun_loaded_page := true ; immutable metafun_loaded_page ;
+
+def LoadPageState = enddef ; % just in case some old style uses it
+
+% Next we implement the the page area model. First some constants. We use a
+% matrix approach as we do at the TeX end but we could have gone for a period
+% separated variant. Too late.
+
+LeftEdge             :=  -4 ; Top             := -40 ;
+LeftEdgeSeparator    :=  -3 ; TopSeparator    := -30 ;
+LeftMargin           :=  -2 ; Header          := -20 ;
+LeftMarginSeparator  :=  -1 ; HeaderSeparator := -10 ;
+Text                 :=   0 ; Text            :=   0 ;
+RightMarginSeparator :=  +1 ; FooterSeparator := +10 ;
+RightMargin          :=  +2 ; Footer          := +20 ;
+RightEdgeSeparator   :=  +3 ; BottomSeparator := +30 ;
+RightEdge            :=  +4 ; Bottom          := +40 ;
+
+numeric HorPos ; HorPos := 0 ;
+numeric VerPos ; VerPos := 0 ;
+
+immutable % permanent
+    Text, HorPos, VerPos,
+    LeftEdge, LeftEdgeSeparator, LeftMargin, LeftMarginSeparator,
+    RightMarginSeparator, RightMargin, RightEdgeSeparator, RightEdge,
+    Top, TopSeparator, Header, HeaderSeparator,
+    FooterSeparator, Footer, BottomSeparator, Bottom ;
+
+% Because metapost > 1.50 has dynamic memory management and is less efficient than
+% before we now delay calculations ... (on a document with 150 pages the time spent
+% in mp was close to 5 seconds which was only due to initialising the page related
+% areas, something that was hardly noticeable before. At least now we're back to
+% half a second for such a case.
+
+% We could go for just setting them (:=):
+
+path    mfun_page_area    [][][] ;
+pair    mfun_page_location[][][] ;
+path    mfun_page_field   [][][] ;
+numeric mfun_page_vsize   [][] ;
+numeric mfun_page_hsize   [][] ;
+numeric mfun_page_vstep   [][] ;
+numeric mfun_page_hstep   [][] ;
+
+numeric mfun_page_odd ; mfun_page_odd := 1 ;
+
+def mfun_page_check_vsize =
+    mfun_page_vsize[mfun_page_odd][Top]             := TopHeight ;
+    mfun_page_vsize[mfun_page_odd][TopSeparator]    := TopDistance ;
+    mfun_page_vsize[mfun_page_odd][Header]          := HeaderHeight ;
+    mfun_page_vsize[mfun_page_odd][HeaderSeparator] := HeaderDistance ;
+    mfun_page_vsize[mfun_page_odd][Text]            := TextHeight ;
+    mfun_page_vsize[mfun_page_odd][FooterSeparator] := FooterDistance ;
+    mfun_page_vsize[mfun_page_odd][Footer]          := FooterHeight ;
+    mfun_page_vsize[mfun_page_odd][BottomSeparator] := BottomDistance ;
+    mfun_page_vsize[mfun_page_odd][Bottom]          := BottomHeight ;
+enddef ;
+
+def mfun_page_check_hsize =
+    mfun_page_hsize[mfun_page_odd][LeftEdge]             := LeftEdgeWidth ;
+    mfun_page_hsize[mfun_page_odd][LeftEdgeSeparator]    := LeftEdgeDistance ;
+    mfun_page_hsize[mfun_page_odd][LeftMargin]           := LeftMarginWidth ;
+    mfun_page_hsize[mfun_page_odd][LeftMarginSeparator]  := LeftMarginDistance ;
+    mfun_page_hsize[mfun_page_odd][Text]                 := MakeupWidth ;
+    mfun_page_hsize[mfun_page_odd][RightMarginSeparator] := RightMarginDistance ;
+    mfun_page_hsize[mfun_page_odd][RightMargin]          := RightMarginWidth ;
+    mfun_page_hsize[mfun_page_odd][RightEdgeSeparator]   := RightEdgeDistance ;
+    mfun_page_hsize[mfun_page_odd][RightEdge]            := RightEdgeWidth ;
+enddef ;
+
+def mfun_page_check_vstep =
+    mfun_page_vstep[mfun_page_odd][TopSeparator]    := PaperHeight-TopSpace ;
+    mfun_page_vstep[mfun_page_odd][Top]             := mfun_page_vstep[mfun_page_odd][TopSeparator]   +mfun_page_vsize[mfun_page_odd][TopSeparator] ;
+    mfun_page_vstep[mfun_page_odd][Header]          := mfun_page_vstep[mfun_page_odd][TopSeparator]   -mfun_page_vsize[mfun_page_odd][Header] ;
+    mfun_page_vstep[mfun_page_odd][HeaderSeparator] := mfun_page_vstep[mfun_page_odd][Header]         -mfun_page_vsize[mfun_page_odd][HeaderSeparator] ;
+    mfun_page_vstep[mfun_page_odd][Text]            := mfun_page_vstep[mfun_page_odd][HeaderSeparator]-mfun_page_vsize[mfun_page_odd][Text] ;
+    mfun_page_vstep[mfun_page_odd][FooterSeparator] := mfun_page_vstep[mfun_page_odd][Text]           -mfun_page_vsize[mfun_page_odd][FooterSeparator] ;
+    mfun_page_vstep[mfun_page_odd][Footer]          := mfun_page_vstep[mfun_page_odd][FooterSeparator]-mfun_page_vsize[mfun_page_odd][Footer] ;
+    mfun_page_vstep[mfun_page_odd][BottomSeparator] := mfun_page_vstep[mfun_page_odd][Footer]         -mfun_page_vsize[mfun_page_odd][BottomSeparator] ;
+    mfun_page_vstep[mfun_page_odd][Bottom]          := mfun_page_vstep[mfun_page_odd][BottomSeparator]-mfun_page_vsize[mfun_page_odd][Bottom] ;
+enddef ;
+
+def mfun_page_check_hstep =
+    mfun_page_hstep[mfun_page_odd][Text]                 := BackSpace ;
+    mfun_page_hstep[mfun_page_odd][LeftMarginSeparator]  := mfun_page_hstep[mfun_page_odd][Text]                -mfun_page_hsize[mfun_page_odd][LeftMarginSeparator] ;
+    mfun_page_hstep[mfun_page_odd][RightMarginSeparator] := mfun_page_hstep[mfun_page_odd][Text]                +mfun_page_hsize[mfun_page_odd][Text] ;
+    mfun_page_hstep[mfun_page_odd][LeftMargin]           := mfun_page_hstep[mfun_page_odd][LeftMarginSeparator] -mfun_page_hsize[mfun_page_odd][LeftMargin] ;
+    mfun_page_hstep[mfun_page_odd][RightMargin]          := mfun_page_hstep[mfun_page_odd][RightMarginSeparator]+mfun_page_hsize[mfun_page_odd][RightMarginSeparator] ;
+    mfun_page_hstep[mfun_page_odd][LeftEdgeSeparator]    := mfun_page_hstep[mfun_page_odd][LeftMargin]          -mfun_page_hsize[mfun_page_odd][LeftEdgeSeparator] ;
+    mfun_page_hstep[mfun_page_odd][LeftEdge]             := mfun_page_hstep[mfun_page_odd][LeftEdgeSeparator]   -mfun_page_hsize[mfun_page_odd][LeftEdge] ;
+    mfun_page_hstep[mfun_page_odd][RightEdgeSeparator]   := mfun_page_hstep[mfun_page_odd][RightMargin]         +mfun_page_hsize[mfun_page_odd][RightMargin] ;
+    mfun_page_hstep[mfun_page_odd][RightEdge]            := mfun_page_hstep[mfun_page_odd][RightEdgeSeparator]  +mfun_page_hsize[mfun_page_odd][RightEdgeSeparator] ;
+enddef ;
+
+numeric mfun_last_changed_page ; mfun_last_changed_page := -1 ;
+boolean mfun_page_done_odd     ; mfun_page_done_odd     := false ;
+boolean mfun_page_done_even    ; mfun_page_done_even    := false ;
+
+def mfun_check_page_dimensions_indeed =
+    mfun_page_check_vsize ;
+    mfun_page_check_hsize ;
+    mfun_page_check_vstep ;
+    mfun_page_check_hstep ;
+enddef ;
+
+def mfun_check_page_dimensions =
+    begingroup ;
+    save n ; n := LastChangedLayoutPage ;
+    SwapMarginDimensions ; % always
+    if mfun_last_changed_page <> n :
+        report("page", "layout changed") ;
+        mfun_page_done_odd := false ;
+        mfun_page_done_even := false ;
+        mfun_last_changed_page := n ;
+    fi ;
+    if odd RealPageNumber :
+        mfun_page_odd := 1 ;
+        if not mfun_page_done_odd :
+            report("page", "checking odd") ;
+            mfun_check_page_dimensions_indeed ;
+            mfun_page_done_odd := true ;
+        fi ;
+    else :
+        mfun_page_odd := 2 ;
+        if not mfun_page_done_even :
+            report("page", "checking even") ;
+            mfun_check_page_dimensions_indeed ;
+            mfun_page_done_even := true ;
+        fi ;
+    fi ;
+    endgroup ;
+enddef;
+
+def mfun_check_page_area =
+    mfun_check_page_dimensions ;
+    for VerPos=Top step 10 until Bottom:
+        for HorPos=LeftEdge step 1 until RightEdge:
+            mfun_page_area[mfun_page_odd][HorPos][VerPos] := unitsquare xscaled mfun_page_hsize[mfun_page_odd][HorPos] yscaled mfun_page_vsize[where][VerPos] ;
+            mfun_page_area[mfun_page_odd][VerPos][HorPos] := mfun_page_area[mfun_page_odd][HorPos][VerPos] ;
+        endfor ;
+    endfor ;
+enddef ;
+
+def mfun_check_page_location =
+    mfun_check_page_dimensions ;
+    for VerPos=Top step 10 until Bottom:
+        for HorPos=LeftEdge step 1 until RightEdge:
+            mfun_page_location[mfun_page_odd][HorPos][VerPos] := (mfun_page_hstep[mfun_page_odd][HorPos],mfun_page_vstep[mfun_page_odd][VerPos]) ;
+            mfun_page_location[mfun_page_odd][VerPos][HorPos] := mfun_page_location[mfun_page_odd][HorPos][VerPos] ;
+        endfor ;
+    endfor ;
+enddef ;
+
+def mfun_check_page_field =
+    mfun_check_page_dimensions ;
+    for VerPos=Top step 10 until Bottom:
+        for HorPos=LeftEdge step 1 until RightEdge:
+            mfun_page_field[mfun_page_odd][HorPos][VerPos] := unitsquare xscaled mfun_page_hsize[mfun_page_odd][HorPos] yscaled mfun_page_vsize[mfun_page_odd][VerPos] shifted (mfun_page_hstep[mfun_page_odd][HorPos],mfun_page_vstep[mfun_page_odd][VerPos]) ;
+            mfun_page_field[mfun_page_odd][VerPos][HorPos] := mfun_page_field[mfun_page_odd][HorPos][VerPos] ;
+        endfor ;
+    endfor ;
+enddef ;
+
+def Area     = hide(mfun_check_page_area       ;) mfun_page_area    [mfun_page_odd] enddef ;
+def Location = hide(mfun_check_page_location   ;) mfun_page_location[mfun_page_odd] enddef ;
+def Field    = hide(mfun_check_page_field      ;) mfun_page_field   [mfun_page_odd] enddef ;
+def Vsize    = hide(mfun_check_page_dimensions ;) mfun_page_vsize   [mfun_page_odd] enddef ;
+def Hsize    = hide(mfun_check_page_dimensions ;) mfun_page_hsize   [mfun_page_odd] enddef ;
+def Vstep    = hide(mfun_check_page_dimensions ;) mfun_page_vstep   [mfun_page_odd] enddef ;
+def Hstep    = hide(mfun_check_page_dimensions ;) mfun_page_hstep   [mfun_page_odd] enddef ;
+
+immutable % permanent
+    Area, Location, Field, Vsize, Hsize, Vstep, Hstep ;
+
+vardef FrontPageWidth  = PaperWidth enddef ;
+vardef BackPageWidth   = PaperWidth enddef ;
+vardef CoverWidth      = 2 * PaperWidth + SpineWidth enddef ;
+vardef CoverHeight     = PaperHeight enddef ;
+
+vardef FrontPageHeight = PaperHeight enddef ;
+vardef BackPageHeight  = PaperHeight enddef ;
+vardef SpineHeight     = PaperHeight enddef ;
+
+path mfun_page_page, mfun_page_cover, mfun_page_spine, mfun_page_back, mfun_page_front ;
+
+def mfun_check_page  = mfun_page_page  := unitsquare xscaled PaperWidth     yscaled PaperHeight ; enddef ;
+def mfun_check_cover = mfun_page_cover := unitsquare xscaled CoverWidth     yscaled CoverHeight ; enddef ;
+def mfun_check_spine = mfun_page_spine := unitsquare xscaled SpineWidth     yscaled CoverHeight shifted (BackPageWidth,0) ; enddef ;
+def mfun_check_back  = mfun_page_back  := unitsquare xscaled BackPageWidth  yscaled CoverHeight ; enddef ;
+def mfun_check_front = mfun_page_front := unitsquare xscaled FrontPageWidth yscaled CoverHeight shifted (BackPageWidth+SpineWidth,0) ; enddef ;
+
+def Page      = hide(mfun_check_page  ;) mfun_page_page  enddef ;
+def CoverPage = hide(mfun_check_cover ;) mfun_page_cover enddef ;
+def Spine     = hide(mfun_check_spine ;) mfun_page_spine enddef ;
+def BackPage  = hide(mfun_check_back  ;) mfun_page_back  enddef ;
+def FrontPage = hide(mfun_check_front ;) mfun_page_front enddef ;
+
+% pages
+
+def StartPage =
+    begingroup ;
+    setbounds currentpicture to Page ;
+enddef ;
+
+def StopPage =
+    setbounds currentpicture to Page ;
+    endgroup ;
+enddef ;
+
+% cover pages
+
+def StartCover =
+    begingroup ;
+    setbounds currentpicture to CoverPage enlarged PaperBleed ;
+enddef ;
+
+def StopCover =
+    setbounds currentpicture to CoverPage enlarged PaperBleed ;
+    endgroup ;
+enddef ;
+
+immutable % permanent
+    FrontPageWidth, BackPageWidth, CoverWidth, FrontPageHeight, BackPageHeight, CoverHeight,
+    SpineHeight, Page, CoverPage, Spine, BackPage, FrontPage,
+    StartPage, StopPage, StartCover, StopCover ;
+
+% overlays:
+
+def OverlayBox =
+    (unitsquare xyscaled (OverlayWidth,OverlayHeight))
+enddef ;
+
+def BoundToOverlayBox =
+    setbounds currentpicture to OverlayBox;
+enddef ;
+
+immutable % permanent
+    OverlayBox ;
+
+permanent
+    BoundToOverlayBox ;
+
+% handy
+
+def innerenlarged =
+    if OnRightPage : leftenlarged  else : rightenlarged fi
+enddef ;
+
+def outerenlarged =
+    if OnRightPage : rightenlarged else : leftenlarged  fi
+enddef ;
+
+permanent
+    innerenlarged, outerenlarged ;
+
+% obsolete
+
+% def llEnlarged (expr p,d) = (llcorner p shifted (-d,-d)) enddef ;
+% def lrEnlarged (expr p,d) = (lrcorner p shifted (+d,-d)) enddef ;
+% def urEnlarged (expr p,d) = (urcorner p shifted (+d,+d)) enddef ;
+% def ulEnlarged (expr p,d) = (ulcorner p shifted (-d,+d)) enddef ;
+
+% def Enlarged (expr p, d) =
+%     (
+%         llEnlarged (p,d) --
+%         lrEnlarged (p,d) --
+%         urEnlarged (p,d) --
+%         ulEnlarged (p,d) --
+%         cycle
+%     )
+% enddef ;

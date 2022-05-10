@@ -1,0 +1,81 @@
+local dimensions, kerns  if CONTEXTLMTXMODE == 0 then
+
+    local kern_V = { bottomright = { { kern = -200 } }, topright = { { kern = 50 } } }
+    local kern_W = { bottomright = { { kern = -100 } }, topright = { { kern = 50 } } }
+
+    kerns = {
+        [0x1D449] = kern_V, -- 𝑉
+        [0x1D44A] = kern_W, -- 𝑊
+    }
+
+end
+
+return {
+    name = "schola-math",
+    version = "1.00",
+    comment = "Goodies that complement schola.",
+    author = "Hans Hagen & Mikael Sundqvist",
+    copyright = "ConTeXt development team",
+    mathematics = {
+        parameters = {
+            NoLimitSupFactor =   0,
+            NoLimitSubFactor = 900,
+         -- AccentBaseHeight =   0,
+            AccentBaseDepth  =  30,
+        },
+        tweaks = {
+            aftercopying = {
+                {
+                    tweak    = "version",
+                    expected = "Version 1.533",
+                },
+                {
+                    tweak = "dimensions",
+                    list  = {
+                        -- nothing yet
+                    }
+                },
+                {
+                    tweak = "kerns",
+                    list  = {
+                        [0x2F] = {
+                            topleft     = -0.2,
+                         -- bottomleft  =  0,
+                         -- topright    =  0,
+                            bottomright =  -0.2,
+                       },
+                    },
+                },
+                {
+                    tweak   = "fixprimes",
+                    scale   = 0.85,
+                 -- smaller = true,
+                    factor  = 1,
+                },
+                {
+                    tweak = "checkspacing",
+                },
+                {
+                    tweak = "addscripts",
+                },
+                {
+                    tweak = "accentdimensions",
+                },
+                {
+                    tweak = "addrules",
+                },
+            },
+        },
+        bigslots = {
+            1, 3, 5, 7
+        },
+        alternates = {
+            dotless = { feature = 'dtls', value = 1, comment = "Mathematical Dotless Forms" },
+        },
+        --
+        -- experimental fixes for mkiv:
+        --
+        dimensions = dimensions,
+        kerns = kerns,
+    },
+}

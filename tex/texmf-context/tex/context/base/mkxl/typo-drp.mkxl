@@ -1,0 +1,192 @@
+%D \module
+%D   [       file=typo-drp, % was typo-par
+%D        version=2011.10.27,
+%D          title=\CONTEXT\ Typesetting Macros,
+%D       subtitle=Initials,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Typesetting Macros / Initials}
+
+%D This will change ... par specific attribute set and such.
+
+\unprotect
+
+\registerctxluafile{typo-drp}{autosuffix}
+
+\definesystemattribute[initial][public]
+
+\appendtoks
+    \c_attr_initial\attributeunsetvalue
+\to \everyforgetall
+
+%D For the moment here: dropped caps redone. In addition to the parameters shown in
+%D the example you can use the \type {style} and more low level \type {font} keys to
+%D set up the font where the first one wins. If you don't like the behaviour you can
+%D always roll out your own command.
+%D
+%D \starttyping
+%D \placeinitial \input ward \par \input ward \par \placeinitial \input tufte
+%D
+%D \setupinitial
+%D   [location=text,
+%D    n=2,
+%D    color=darkred,
+%D    distance=-1em,
+%D    hoffset=1em,
+%D    voffset=-3ex,
+%D    before=\blank]
+%D
+%D \placeinitial \input ward \par \input ward \placeinitial \input tufte
+%D \stoptyping
+
+% todo: angle (once we can set parshape at the Lua end)
+
+\installcorenamespace{initial}
+
+\installcommandhandler \??initial {initial} \??initial
+
+\definemeasure[initial:n][\lineheight*\initialparameter\c!n - \strutdp]
+
+\setupinitial
+  [\c!location=\v!text,
+   \c!n=3,
+   \c!m=1,
+   \c!method=\v!none,
+ % \c!font=Bold sa 4,
+ % \c!font=Bold ht \measure{initial:n},
+   \c!font=Bold cp \measure{initial:n},
+   \c!distance=.125\emwidth,
+   \c!hoffset=\zeropoint,
+   \c!voffset=\v!line, % \dimexp\lineheight*\initialparameter\c!n-\lineheight\relax]
+   \c!style=,
+   \c!color=,
+   \c!before=\blank]
+
+\permanent\tolerant\protected\def\placeinitial[#1]% old command
+  {\par
+   \namedinitialparameter{#1}\c!before
+   \enforced\edef\typo_initial_handle{\typo_initial_handle_indeed{#1}{}}}
+
+\permanent\tolerant\protected\def\setinitial[#1]#*[#2]%
+  {\enforced\edef\typo_initial_handle{\typo_initial_handle_indeed{#1}{#2}}}
+
+\permanent\tolerant\protected\def\flushinitial % when used inside a mechanism that forgets
+  {\typo_initial_handle}
+
+\newconstant   \c_initial_lines
+\newconditional\c_initial_synchronize
+
+% First experiment:
+%
+% \startluacode
+%     function nodes.handlers.forgetinitial(mode,indented,context)
+%         token.expandmacro("forgetinitial")
+%         return indented
+%     end
+%     utilities.sequencers.prependaction("paragraph","system","nodes.handlers.forgetinitial")
+%     utilities.sequencers.enableaction("paragraph","nodes.handlers.forgetinitial")
+% \stopluacode
+%
+% Second experiment:
+%
+% \appendtoks
+%     \forgetinitial
+% \to \everybeforepar
+
+\protected\def\typo_initial_handle_indeed#1#2%
+  {\dontleavehmode
+   \begingroup
+   \edef\currentinitial{#1}%
+   \setupcurrentinitial[#2]%
+   \resetfontfeature % might be needed in more places
+   \doifelsenothing{\initialparameter\c!style}
+     {\definedfont[\initialparameter\c!font]}
+     {\useinitialstyleparameter\c!style}%
+   \useinitialcolorparameter\c!color
+   \edef\p_voffset{\initialparameter\c!voffset}%
+   \scratchcounter \initialparameter\c!n\relax
+   \scratchvoffset\dimexpr\ifx\p_voffset\v!line\scratchcounter\lineheight-\lineheight\else\p_voffset\fi\relax
+   \clf_setinitial
+        location   {\initialparameter\c!location}%
+        enabled    true\space
+        n          \scratchcounter
+        m          \numexpr\initialparameter\c!m\relax
+        method     {\initialparameter\c!method}%
+        distance   \dimexpr\initialparameter\c!distance\relax
+        hoffset    \dimexpr\initialparameter\c!hoffset\relax
+        voffset    \scratchvoffset
+        ma         \c_attr_colormodel
+        ca         \c_attr_color
+        ta         \c_attr_transparency
+        font       \fontid\font
+        glyphscale \glyphscale
+        dynamic    \font_dynamic_value % it's a bit over the top to support this here
+   \relax
+   \c_attr_initial\plusone
+   \initialparameter\c!text
+   \normalexpanded{\endgroup\c_initial_lines\the\scratchcounter}%
+   \enforced\glettonothing\typo_initial_handle
+   \ifconditional\c_initial_synchronize
+     \appendtoks \forgetinitial \to \everybeforepar
+   \fi}
+
+\lettonothing\typo_initial_handle % hook into everypar
+
+\permanent\protected\def\forgetinitial
+  {\ifcase\c_initial_lines\else
+     \begingroup
+     \advance\c_initial_lines-\prevgraf\relax
+     \ifcase\c_initial_lines\else
+       \obeydepth
+       \forgetall
+       \testpage[\the\c_initial_lines]%
+       \dorecurse\c_initial_lines{\nointerlineskip\hpack to \hsize{\strut}\par}%
+     \fi
+     \endgroup
+     \c_initial_lines\zerocount
+     \ifconditional\c_initial_synchronize
+       \removetoks \forgetinitial \from \everybeforepar
+     \fi
+  \fi}
+
+%D \starttyping
+%D \setupinitial[n=2,style=\tfd,location=text]
+%D \setuphead[chapter][after=\placeinitial]
+%D \enableexperiments[autoforgetinitials]
+%D
+%D \starttext
+%D   \chapter{Test me} Hello world!
+%D  %\forgetinitial \input tufte
+%D   \input tufte
+%D \stoptext
+%D \stoptyping
+
+% \enableexperiments[autoforgetinitials]
+
+\installtexexperiment
+   {autoforgetinitials}
+   {\settrue \c_initial_synchronize}
+   {\setfalse\c_initial_synchronize}
+
+% \setupbodyfont[dejavu,9pt]
+%
+% \startbuffer
+% \setinitial[two]            D. E. Knuth   \ignorespaces\input knuth \par
+% \setinitial[two]                  Knuth   \ignorespaces\input knuth \par
+% \setinitial[two] \quotation{D. E. Knuth}  \ignorespaces\input knuth \par
+% \setinitial[two] \quotation      {Knuth}  \ignorespaces\input knuth \par
+% \setinitial[two]      [text={D.E. Knuth}] \ignorespaces\input knuth \par
+% \setinitial[two]       [m=4] D. E. Knuth  \ignorespaces\input knuth \par
+% \stopbuffer
+%
+% \type{m=2}                          \start \defineinitial[two][m=2,method=none]              \getbuffer \page \stop
+% \type{m=1,method=auto}              \start \defineinitial[two][m=1,method=auto]              \getbuffer \page \stop
+% \type{m=1,method={auto,first,last}} \start \defineinitial[two][m=1,method={first,auto,last}] \getbuffer \page \stop
+
+\protect \endinput

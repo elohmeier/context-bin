@@ -1,0 +1,264 @@
+if not modules then modules = { } end modules ['lang-hup'] = {
+    version   = 1.001,
+    comment   = "companion to lang-hup.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local type, next = type, next
+local utfchar = utf.char
+local concat, sortedhash = table.concat, table.sortedhash
+local basename = file.basename
+
+local status        = status
+local nodes         = nodes
+
+local is_letter     = characters.is_letter
+local is_hyphenator = characters.is_hyphenator
+
+local specialskips  = nodes.specialskipcodes
+local nodecodes     = nodes.nodecodes
+local disc_code     = nodecodes.disc
+local glyph_code    = nodecodes.glyph
+local glue_code     = nodecodes.glue
+local hlist_code    = nodecodes.hlist
+local kern_code     = nodecodes.kern
+local par_code      = nodecodes.par
+local line_code     = nodes.listcodes.line
+local fontkern_code = nodes.kerncodes.fontkern
+local nuts          = nodes.nuts
+local getlist       = nuts.getlist
+local getnext       = nuts.getnext
+local getprev       = nuts.getprev
+local getid         = nuts.getid
+local getsubtype    = nuts.getsubtype
+local getreplace    = nuts.getreplace
+local getdiscpart   = nuts.getdiscpart
+local isnextglyph   = nuts.isnextglyph
+local nexthlist     = nuts.traversers.list
+local nextglyph     = nuts.traversers.glyph
+local traverse      = nuts.traverse
+
+local setcolor      = nodes.tracers.colors.set
+local setaction     = nodes.tasks.setaction
+
+local hash          = table.setmetatableindex("number")
+
+local report        = logs.reporter("hyphenated")
+local trace_detail  = false
+
+local characters    = fonts.hashes.characters
+
+local word = { }
+local w    = 0
+
+----- function collect(word,head)
+local function collect(head)
+    local last = nil
+    while head do
+        local nxt, char, id = isnextglyph(head)
+        if char then
+            local u = characters[id][char].unicode -- we could cache it
+            if type(u) == "table" then
+                for i=1,#u do
+                    local c = u[i]
+                    if is_letter[c] or is_hyphenator[c] then
+                     -- word[#word+1] = utfchar(c)
+                        w = w + 1 ; word[w] = utfchar(c)
+                    end
+                end
+            else
+                local c = u or char
+                if is_letter[c] or is_hyphenator[c] then
+                 -- word[#word+1] = utfchar(c)
+                    w = w + 1 ; word[w] = utfchar(c)
+                end
+            end
+            last = head
+        elseif id == disc_code then
+         -- collect(word,getreplace(head))
+            collect(getreplace(head))
+        elseif id == kern_code and getsubtype(head,fontkern_code) then
+            -- we're ok
+        else
+            break
+        end
+        head = nxt
+    end
+    return last and getdiscpart(last) == 1
+end
+
+local function getpostpart(current)
+    for n, id, subtype in traverse(current) do
+        if id == glue_code then
+            if not specialskips[subtype] then
+                break
+            end
+        elseif id == glyph_code or id == disc_code then
+            return n
+        elseif id ~= par_code then
+            break
+        end
+    end
+end
+
+local function findprepart(current)
+    for n, id, subtype in traverse(current,true,true) do
+        if id == glue_code then
+            if not specialskips[subtype] then
+                break
+            end
+        elseif id == glyph_code and getdiscpart(n) == 1 then
+            return n
+        else
+            break
+        end
+    end
+end
+
+local function getprepart(disc)
+    local back = disc
+    for n, id, subtype in traverse(getprev(disc),true) do
+        if id == glyph_code or id == disc_code or (id == kern_code and subtype == fontkern_code) then
+            back = n
+        else
+            return back
+        end
+    end
+    return back
+end
+
+function nodes.handlers.showhyphenation(head)
+ -- local word = { }
+    w = 0
+    for current, id, subtype, list in nexthlist, head do
+        if list and subtype == line_code then
+         -- if #word > 0 then
+            if w > 0 then
+                local after = getpostpart(list)
+             -- local more  = collect(word,after)
+                local more  = collect(after)
+                if more then
+                    goto skip
+                else
+                 -- local result = concat(word)
+                    local result = concat(word,"",1,w)
+                    if trace_detail then
+                        local r = status.readstate
+                        report("around line %s in file %s: %s",r.linenumber or "-",basename(r.filename),result)
+                    end
+                    hash[result] = hash[result] + 1
+                 -- word = { }
+                    w = 0
+                end
+            end
+            local last = findprepart(list)
+            if last then
+                local before = getprepart(last)
+             -- collect(word,before)
+                collect(before)
+            end
+          ::skip::
+        end
+    end
+    return head
+end
+
+local initialize  initialize = function()
+    logs.registerfinalactions(function()
+        logs.startfilelogging(report,"hyphenated words")
+        if hash and next(hash) then
+            local oldname = file.nameonly(tex.jobname) .. "-hyphenated-words-old.txt"
+            local newname = file.nameonly(tex.jobname) .. "-hyphenated-words-new.txt"
+            local old = string.splitlines(string.strip(io.loaddata(oldname) or "")) or { }
+            local hsh = table.tohash(old)
+            local new = { }
+            for word, count in sortedhash(hash) do
+                report("%4i : %s",count,word)
+                if not hsh[word] then
+                    new[#new+1] = word
+                end
+            end
+            logs.stopfilelogging()
+            report("old word list : %a",oldname)
+            report("new word list : %a",newname)
+            report("to be checked : %a",#new)
+            io.savedata(newname,concat(new,"\n"))
+        else
+            report("nothing hyphenated")
+            logs.stopfilelogging()
+        end
+    end)
+    --
+    statistics.register("hyphenation",function()
+        local n = 0
+        local m = 0
+        for k, v in sortedhash(hash) do
+            n = n + 1
+            m = m + v
+        end
+        return string.format("%i hyphenated words, %i unique words",m,n)
+    end)
+    initialize = false
+end
+
+trackers.register("hyphenation.applied", function(v)
+    setaction("finalizers","nodes.handlers.showhyphenation",v)
+    if v and initialize then
+        initialize()
+    end
+end)
+
+trackers.register("hyphenation.applied.console", function(v)
+    setaction("finalizers","nodes.handlers.showhyphenation",v)
+    trace_detail = v
+    if v and initialize then
+        initialize()
+    end
+end)
+
+-- local c, f = isglyph(current)
+-- local char = chardata[f][c]
+-- if char and type(char.unicode) == "table" then -- hackery test
+
+local ligature_code = 0x8000 + nodes.glyphcodes.ligature
+local ligature_mode = false
+
+local color_n = { "red",     "green",     "blue"     }
+local color_l = { "darkred", "darkgreen", "darkblue" }
+
+function nodes.handlers.visualizehyphenation(head)
+    for current, id, subtype, list in nexthlist, head do
+        if list and subtype == line_code then
+            if ligature_mode then
+                for n in nextglyph, list do
+                    local d = getdiscpart(n)
+                    local s = getsubtype(n)
+                    if d > 0 and d < 4 then
+                        if s == ligature_code then
+                            setcolor(n,color_l[d])
+                        else
+                            setcolor(n,color_n[d])
+                        end
+                    elseif s == ligature_code then
+                        setcolor(n,"darkgray")
+                    end
+                end
+            else
+                for n in nextglyph, list do
+                    local d = getdiscpart(n)
+                    if d > 0 and d < 4 then
+                        setcolor(n,color_n[d])
+                    end
+                end
+            end
+        end
+    end
+    return head
+end
+
+trackers.register("hyphenation.applied.visualize", { true, false, "ligatures" }, function(v)
+    setaction("finalizers","nodes.handlers.visualizehyphenation",v)
+    ligature_mode = v == "ligatures"
+end)

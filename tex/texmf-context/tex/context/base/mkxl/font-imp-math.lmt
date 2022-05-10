@@ -1,0 +1,363 @@
+if not modules then modules = { } end modules ['font-imp-math'] = {
+    version   = 1.001,
+    comment   = "companion to font-ini.mkiv and hand-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local next, type, tonumber = next, type, tonumber
+
+local fonts              = fonts
+local helpers            = fonts.helpers
+local registerotffeature = fonts.handlers.otf.features.register
+
+local setmetatableindex  = table.setmetatableindex
+local sortedhash         = table.sortedhash
+local copytable          = table.copy
+
+local texconditionals    = tex.conditionals
+
+-- tfmdata.properties.mathnolimitsmode = tonumber(value) or 0
+
+local splitter  = lpeg.splitat(",",tonumber)
+local lpegmatch = lpeg.match
+
+local function initialize(tfmdata,value)
+    local mathparameters = tfmdata.mathparameters
+    if mathparameters then
+        local sup, sub
+        if type(value) == "string" then
+            sup, sub = lpegmatch(splitter,value) -- settings_to_array
+            if not sup then
+                sub, sup = 0, 0
+            elseif not sub then
+                sub, sup = sup, 0
+            end
+        elseif type(value) == "number" then
+            sup, sub = 0, value
+        end
+        if sup then
+            mathparameters.NoLimitSupFactor = sup
+        end
+        if sub then
+            mathparameters.NoLimitSubFactor = sub
+        end
+    end
+end
+
+registerotffeature {
+    name         = "mathnolimitsmode",
+    description  = "influence nolimits placement",
+    initializers = {
+        base = initialize,
+        node = initialize,
+    }
+}
+
+
+-- this will become a mode in the engine
+
+local function initialize(tfmdata,value)
+    tfmdata.properties.nostackmath = value and true
+end
+
+registerotffeature {
+    name        = "nostackmath",
+    description = "disable math stacking mechanism",
+    initializers = {
+        base = initialize,
+        node = initialize,
+    }
+}
+
+-- A quick and dirty and low level implementation but okay for testing:
+
+function fonts.helpers.mathscriptslots(tfmdata,textcode)
+    local rawdata           = tfmdata.shared.rawdata
+    local rawresources      = rawdata and rawdata.resources
+    local rawfeatures       = rawresources and rawresources.features
+    local basesubstitutions = rawfeatures and rawfeatures.gsub
+    local sequences         = basesubstitutions and tfmdata.resources.sequences
+    if sequences then
+        local characters = tfmdata.characters
+        if characters[textcode] then
+            for s=1,#sequences do
+                local sequence  = sequences[s]
+                local sfeatures = sequence.features
+                if sfeatures and sfeatures.ssty then
+                    local steps = sequence.steps
+                    for i=1,#steps do
+                        local coverage = steps[i].coverage
+                        if coverage then
+                            local okay = coverage[textcode]
+                            if okay then
+                                -- can be single or table
+                                return okay
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function manipulate(tfmdata,value)
+ -- if texconditionals["c_font_compact"] then
+    if value then -- so basically always
+        local rawdata           = tfmdata.shared.rawdata
+        local rawresources      = rawdata and rawdata.resources
+        local rawfeatures       = rawresources and rawresources.features
+        local basesubstitutions = rawfeatures and rawfeatures.gsub
+        local sequences         = basesubstitutions and tfmdata.resources.sequences
+        if sequences then
+            local characters = tfmdata.characters
+            for s=1,#sequences do
+                local sequence  = sequences[s]
+                local sfeatures = sequence.features
+                if sfeatures and sfeatures.ssty then
+                    local steps = sequence.steps
+                    for i=1,#steps do
+                        local coverage = steps[i].coverage
+                        if coverage then
+                            for textcode, v in next, coverage do
+                                local textdata = characters[textcode]
+                                if textdata then
+                                    local scriptcode, scriptscriptcode
+                                    local sstykind = type(v)
+                                    if sstykind == "table" then
+                                        scriptcode       = v[1]
+                                        scriptscriptcode = v[2]
+                                    elseif sstykind == "number" then
+                                        scriptcode       = v
+                                        scriptscriptcode = v
+                                    else
+                                        -- weird
+                                    end
+                                    if scriptcode then
+                                        local scriptdata       = characters[scriptcode]
+                                        local scriptscriptdata = characters[scriptscriptcode]
+                                        if scriptdata and scriptdata ~= textdata then
+                                            textdata.smaller = scriptcode
+                                            if scriptscriptdata and scriptdata ~= scriptscriptdata then
+                                                scriptdata.smaller = scriptscriptcode
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function initialize(tfmdata,value)
+    -- Here it really gets enabled as the scales are used.
+    if texconditionals["c_font_compact"] then
+        local rawdata       = tfmdata.shared.rawdata
+        local rawresources  = rawdata and rawdata.resources
+        local mathconstants = rawresources.mathconstants
+        if mathconstants then
+            local parameters = tfmdata.parameters
+            local properties = tfmdata.properties
+            parameters.textscale         = 1000
+            parameters.scriptscale       = mathconstants.ScriptPercentScaleDown * 10
+            parameters.scriptscriptscale = mathconstants.ScriptScriptPercentScaleDown * 10
+            properties.compactmath       = true
+        end
+    end
+end
+
+-- local specification = {
+--     name         = "compactmath",
+--     description  = "use one math font",
+--     manipulators = {
+--         base = manipulate,
+--         node = manipulate,
+--     },
+--     initializers = {
+--         base = initialize,
+--         node = initialize,
+--     }
+-- }
+
+registerotffeature {
+    name         = "compactmath",
+    description  = "use one math font",
+    initializers = {
+        base = function(...) manipulate(...) initialize(...) end,
+        node = function(...) manipulate(...) initialize(...) end,
+    }
+}
+
+-- The problem is that the traditional code path doesn't add an italic to the subscript,
+-- simply because it assumes that the width has that already subtracted. So, we cannot
+-- compensate in the following way. We're stuck with the fact that the texgyre fonts
+-- assume a traditional tex engine.
+
+-- local function manipulate(tfmdata,key,value)
+--     if value == "correct" then
+--         local chardata = characters.data
+--         for unicode, data in next, tfmdata.characters do
+--             local italic = data.italic
+--             if italic then
+--                 -- todo: only letters
+--                 data.width = (data.width or 0) + italic
+--                 local cd = chardata[unicode]
+--                 if cd then
+--                     local visual = cd.visual
+--                     if visual == "it" or visual == "bi" then
+--                         italic = -italic
+--                     else
+--                         italic = 0
+--                     end
+--                 else
+--                     italic = 0
+--                 end
+--                 data.italic = italic
+--             end
+--         end
+--     end
+-- end
+
+local function initialize(tfmdata,value)
+    if value then
+        local rawdata       = tfmdata.shared.rawdata
+        local rawresources  = rawdata and rawdata.resources
+        local mathconstants = rawresources.mathconstants
+        if mathconstants then
+            tfmdata.properties.oldmath = true
+        end
+    end
+end
+
+registerotffeature {
+    name         = "oldmath",
+    description  = "deal with fake opentype fonts",
+ -- manipulators = {
+ --     base = manipulate,
+ --     node = manipulate,
+ -- },
+    initializers = {
+        base = initialize,
+        node = initialize,
+    }
+}
+
+local function initialize(tfmdata,value)
+    if type(value) == "string" then
+        local rawdata       = tfmdata.shared.rawdata
+        local rawresources  = rawdata and rawdata.resources
+        local mathconstants = rawresources.mathconstants
+        if mathconstants then
+            local bitmap = tex.stringtocodesbitmap(value,tex.mathcontrolcodes)
+         -- logs.report("mathfont","setting math control to %08X",bitmap)
+            tfmdata.properties.mathcontrol = bitmap
+        end
+    end
+end
+
+registerotffeature {
+    name         = "mathcontrol",
+    description  = "control specific old/new math handling",
+    initializers = {
+        base = initialize,
+        node = initialize,
+    }
+}
+
+local function initialize(tfmdata,value)
+    if value then
+        local validlookups, lookuplist = fonts.handlers.otf.collectlookups(tfmdata.shared.rawdata,"flac","math","dflt")
+        if validlookups then
+            -- it's quite likely just one step
+            local characters = tfmdata.characters
+            local changed = tfmdata.changed
+            for i=1,#lookuplist do
+                local lookup   = lookuplist[i]
+                local steps    = lookup.steps
+                local nofsteps = lookup.nofsteps
+                for i=1,nofsteps do
+                    local coverage = steps[i].coverage
+                    if coverage then
+                        for k, v in next, coverage do
+                            local c = characters[k]
+                            local f = characters[v]
+                            if c and f then
+                                c.flataccent = v
+                                if not f.unicode then
+                                    f.unicode = c.unicode
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+registerotffeature {
+    name         = "flattenaccents",
+    description  = "mapping accents to flat ones",
+    initializers = {
+        base = initialize,
+        node = initialize,
+    }
+}
+
+-- todo: document our privates
+
+-- This horrible hack is needed because when opentype math showed up and math was
+-- added to unicode folks had forgotten about different script shapes so we not only
+-- have a retrospective variant selector but inconsistent defaults. What a mess it
+-- is. So the quick and dirty solution is:
+--
+-- add copies in private slots
+-- use a pseudo feature to acess those
+-- and optionally afterwards replace the original slots
+
+local coverage = { }
+
+local function initialize(tfmdata,value)
+    if value then
+        if not next(coverage) then
+            for k, char in next, mathematics.alphabets.sr.tf.lcletters do
+                coverage[char] = 0xFE800 + k
+            end
+            for k, char in next, mathematics.alphabets.sr.tf.ucletters do
+                coverage[char] = 0xFE800 + k
+            end
+            fonts.handlers.otf.addfeature {
+                name = "savemathscripts",
+                type = "substitution",
+                data = coverage,
+            }
+        end
+        local characters   = tfmdata.characters
+        local descriptions = tfmdata.descriptions
+        for char, private in next, coverage do
+            local data = characters[char]
+            if data and not characters[private] then
+                -- otherwise we need a virtual
+                characters  [private] = copytable(data)
+                descriptions[private] = copytable(descriptions[char])
+            end
+        end
+    end
+end
+
+registerotffeature {
+    name         = "copymathscripts",
+    description  = "copy math script",
+    prepend      = 1,
+    initializers = {
+        base = initialize,
+        node = initialize,
+    }
+}
+

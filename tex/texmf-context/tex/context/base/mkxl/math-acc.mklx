@@ -1,0 +1,174 @@
+%D \module
+%D   [       file=math-acc,
+%D        version=2013.07.31,
+%D          title=\CONTEXT\ Math Macros,
+%D       subtitle=Accents,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Math Macros / Accents}
+
+% There are probably errors ... too distracted by amazing (piano) music videos running
+% on top of scite ... so: experimental code.
+
+\unprotect
+
+% This module permits overloading of accents so that we can do fancy things. The
+% implementation is similar to stackers. By default accenst are defined in a simple
+% way. Contrary to extensibles accents cannot grow indefinitely. Alas the
+% implementation of accents is different too, in the sense that they are
+% prepositioned i.e. are already raised. (In my opinion for no real reason as they
+% need to adapt anyway).
+%
+% $ \ruledhbox{$H$}  \hat{H}  \ruledhbox{$\widehat{H}$}  \widehat{H} $
+%
+% One alternative is:
+%
+% \definemathoverextensible [top] [hoed]  ["FE302]
+% \definemathoverextensible [top] [slang] ["FE303]
+%
+% $ \hoed{H} \ruledhbox{$\hoed{H}$}  \ruledhbox{$\hoed{\tf H}$}  \slang{H} $
+%
+% But that nills the italic correction (and I'm in nood to mess with that again).
+%
+% \definemathaccents   [myaccents] [color=darkred]
+% \definemathtopaccent [myaccents] [mywidehat] ["0302]
+%
+% $ \hat{H}  \widehat{H}  \mywidehat{H} $
+
+%D Older implementations are kept in the \MKII\ and \MKIV\ modules for educational
+%D purposes.
+
+\installcorenamespace{mathaccents}
+
+\installcommandhandler \??mathaccents {mathaccent} \??mathaccents
+
+\aliased\let\setupmathaccents\setupmathaccent
+
+\setupmathaccents
+  [\c!top=,
+   \c!bottom=,
+   \c!mathstyle=,
+   \c!color=,
+   \c!stretch=\v!no,
+   \c!define=\v!yes] % not used
+
+\definemathaccent
+  [\v!both]
+
+\definemathaccent
+  [\v!top]
+  [\v!both]
+
+\definemathaccent
+  [\v!bottom]
+  [\v!both]
+
+\permanent\tolerant\protected\def\definemathtopaccent[#1]#*[#2]#*[#3]% class name top
+  {\ifparameter#3\or
+     \frozen\protected\instance\edefcsname#2\endcsname{\math_accent_make_double                        {#1}\plusone{\number#3}\zerocount}%
+   \else
+     \frozen\protected\instance\edefcsname#1\endcsname{\math_accent_make_double\noexpand\currentmathaccent\plusone{\number#2}\zerocount}%
+   \fi}
+
+\permanent\tolerant\protected\def\definemathbottomaccent[#1]#*[#2]#*[#3]% class name bottom
+  {\ifparameter#3\or
+     \frozen\protected\instance\edefcsname#2\endcsname{\math_accent_make_double                        {#1}\plustwo\zerocount{\number#3}}%
+   \else
+     \frozen\protected\instance\edefcsname#1\endcsname{\math_accent_make_double\noexpand\currentmathaccent\plustwo\zerocount{\number#2}}%
+   \fi}
+
+\permanent\tolerant\protected\def\definemathdoubleaccent[#1]#*[#2]#*[#3]#*[#4]% class name top bottom
+  {\ifparameter#4\or
+     \frozen\protected\instance\edefcsname#2\endcsname{\math_accent_make_double                        {#1}\plusthree{\number#3}{\number#4}}%
+   \else
+     \frozen\protected\instance\edefcsname#1\endcsname{\math_accent_make_double\noexpand\currentmathaccent\plusthree{\number#2}{\number#3}}%
+   \fi}
+
+\installlocalcurrenthandler \??mathaccents {mathaccent}
+
+\tolerant\protected\def\math_accent_make_double#class#kind#top#bottom#*[#settings]#:#content%
+  {\beginmathgroup
+   \setlocalmathaccentcurrent{#class}% \edef\currentmathaccent{#class}%
+   \startusemathstyleparameter\mathaccentparameter\c!mathstyle
+   \setupcurrentmathaccent[#settings]%
+   \edef\m_fixed{\ifcstok{\mathaccentparameter\c!stretch}\v!yes\else\s!fixed\fi}%
+   \Umathaccent
+     \usedcolorparameterattributes{\mathaccentparameter\c!color}%
+   \ifcase#kind\or
+     top \m_fixed
+     \fam\zerocount#top
+   \or
+     bottom \m_fixed
+     \fam\zerocount#bottom
+   \or
+     both \m_fixed
+     \fam\zerocount#top
+     \fam\zerocount#bottom
+   \fi
+   {\ifconditional\c_math_accent_auto_dotless\mathdotless\fi#content}%
+   \stopusemathstyleparameter
+   \endmathgroup}
+
+%D Relative new:
+
+\newconditional\c_math_accent_auto_dotless \settrue\c_math_accent_auto_dotless % cf opentype math
+
+\aliased\let\normalgrave\grave
+\aliased\let\normalddot \ddot
+\aliased\let\normalbar  \bar
+\aliased\let\normalacute\acute
+\aliased\let\normalhat  \hat
+\aliased\let\normalcheck\check
+\aliased\let\normalbreve\breve
+\aliased\let\normaldot  \dot
+\aliased\let\normalring \ring
+\aliased\let\normaltilde\tilde
+\aliased\let\normaldddot\dddot
+
+\pushoverloadmode
+
+% these are not stretched  ... we should adapt char-def.lua to use these:
+
+\definemathtopaccent[\v!top][grave]["60]
+\definemathtopaccent[\v!top][ddot] ["A8]
+\definemathtopaccent[\v!top][bar]  ["AF]
+\definemathtopaccent[\v!top][acute]["B4]
+\definemathtopaccent[\v!top][hat]  ["2C6]  % "302
+\definemathtopaccent[\v!top][check]["2C7]
+\definemathtopaccent[\v!top][breve]["2D8]
+\definemathtopaccent[\v!top][dot]  ["2D9]
+\definemathtopaccent[\v!top][ring] ["2DA]
+\definemathtopaccent[\v!top][tilde]["2DC]
+\definemathtopaccent[\v!top][dddot]["20DB]
+
+\definemathaccent
+  [\v!top:\v!stretch]
+  [\v!top]
+  [\c!stretch=\v!yes]
+
+%D We have a problem. We can use stackers but then we need to adapt the dimensions
+%D which is font dependent. So, for now we keep them as accents.
+
+\definemathtopaccent[\v!top:\v!stretch][widegrave]["0300] % ["060]
+\definemathtopaccent[\v!top:\v!stretch][wideddot] ["0308] % ["0A8]
+\definemathtopaccent[\v!top:\v!stretch][widebar]  ["0304] % ["0AF]
+\definemathtopaccent[\v!top:\v!stretch][wideacute]["0301] % ["0B4]
+\definemathtopaccent[\v!top:\v!stretch][widehat]  ["0302] % ["2C6]
+\definemathtopaccent[\v!top:\v!stretch][widecheck]["030C] % ["2C7]
+\definemathtopaccent[\v!top:\v!stretch][widebreve]["0306] % ["2D8]
+\definemathtopaccent[\v!top:\v!stretch][widedot]  ["0307] % ["2D9]
+\definemathtopaccent[\v!top:\v!stretch][widering] ["030A] % ["2DA]
+\definemathtopaccent[\v!top:\v!stretch][widetilde]["0303] % ["2DC]
+\definemathtopaccent[\v!top:\v!stretch][widedddot]["20DB]
+
+\aliased\let\mathring\ring % for a while
+
+\popoverloadmode
+
+\protect \endinput

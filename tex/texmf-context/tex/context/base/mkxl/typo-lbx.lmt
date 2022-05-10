@@ -1,0 +1,250 @@
+if not modules then modules = { } end modules ['typo-lbx'] = {
+    version   = 1.001,
+    optimize  = true,
+    comment   = "companion to typo-lbx.mkxl",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local context      = context
+
+local tostring = tostring
+
+local nuts              = nodes.nuts
+local tonut             = nodes.tonut
+local tonode            = nodes.tonode
+
+local left_box_code     = nodes.listcodes.left
+local right_box_code    = nodes.listcodes.right
+local local_box_code    = nodes.listcodes["local"]
+local hlist_code        = nodes.nodecodes.hlist
+
+-- some can go:
+
+local getlist           = nuts.getlist
+local getprev           = nuts.getprev
+local getnext           = nuts.getnext
+local getattribute      = nuts.getattribute
+local gettail           = nuts.tail
+local getwidth          = nuts.getwidth
+local getboth           = nuts.getboth
+local getindex          = nuts.getindex
+local setlist           = nuts.setlist
+local flushlist         = nuts.flushlist
+local takebox           = nuts.takebox
+local setbox            = nuts.setbox
+local copynode          = nuts.copynode
+local rangedimensions   = nuts.rangedimensions
+local traverse_list     = nuts.traversers.list
+
+----- setlocalbox       = tex.setlocalbox -- todo: also in node.direct namespace
+----- getlocalbox       = tex.getlocalbox -- todo: also in node.direct namespace
+
+local expandmacro       = token.expandmacro
+
+local dimension_value   = tokens.values.dimension
+local integer_value     = tokens.values.integer
+
+local implement         = interfaces.implement
+
+typesetters             = typesetters or { }
+local typesetters       = typesetters
+
+typesetters.localboxes  = typesetters.localboxes or { }
+local localboxes        = typesetters.localboxes
+
+local a_localboxesmark  = attributes.private("localboxesmark")
+
+local starttiming       = statistics.starttiming
+local stoptiming        = statistics.stoptiming
+
+do
+    local lb_found            = nil
+    local lb_index            = 0
+    local lb_linenumber       = 0
+    local lb_linewidth        = 0
+    local lb_localwidth       = 0
+    local lb_progress         = 0
+    local lb_leftoffset       = 0
+    local lb_rightoffset      = 0
+    local lb_leftskip         = 0
+    local lb_rightskip        = 0
+    local lb_lefthang         = 0
+    local lb_righthang        = 0
+    local lb_indent           = 0
+    local lb_parfillleftskip  = 0
+    local lb_parfillrightskip = 0
+    local lb_parinitleftskip  = 0
+    local lb_parinitrightskip = 0
+    local lb_overshoot        = 0
+
+    implement { name = "localboxindex",            public = true, usage = "value", actions = function() return integer_value,   lb_index            end }
+    implement { name = "localboxlinenumber",       public = true, usage = "value", actions = function() return integer_value,   lb_linenumber       end }
+    implement { name = "localboxlinewidth",        public = true, usage = "value", actions = function() return dimension_value, lb_linewidth        end }
+    implement { name = "localboxlocalwidth",       public = true, usage = "value", actions = function() return dimension_value, lb_localwidth       end }
+    implement { name = "localboxprogress",         public = true, usage = "value", actions = function() return dimension_value, lb_progress         end }
+    implement { name = "localboxleftoffset",       public = true, usage = "value", actions = function() return dimension_value, lb_leftoffset       end }
+    implement { name = "localboxrightoffset",      public = true, usage = "value", actions = function() return dimension_value, lb_rightoffset      end }
+    implement { name = "localboxleftskip",         public = true, usage = "value", actions = function() return dimension_value, lb_leftskip         end }
+    implement { name = "localboxrightskip",        public = true, usage = "value", actions = function() return dimension_value, lb_rightskip        end }
+    implement { name = "localboxlefthang",         public = true, usage = "value", actions = function() return dimension_value, lb_lefthang         end }
+    implement { name = "localboxrighthang",        public = true, usage = "value", actions = function() return dimension_value, lb_righthang        end }
+    implement { name = "localboxindent",           public = true, usage = "value", actions = function() return dimension_value, lb_indent           end }
+    implement { name = "localboxparfillleftskip",  public = true, usage = "value", actions = function() return dimension_value, lb_parfillleftskip  end }
+    implement { name = "localboxparfillrightskip", public = true, usage = "value", actions = function() return dimension_value, lb_parfillrightskip end }
+    implement { name = "localboxparinitleftskip",  public = true, usage = "value", actions = function() return dimension_value, lb_parinitleftskip  end }
+    implement { name = "localboxparinitrightskip", public = true, usage = "value", actions = function() return dimension_value, lb_parinitrightskip end }
+    implement { name = "localboxovershoot",        public = true, usage = "value", actions = function() return dimension_value, lb_overshoot        end }
+
+    local cache = table.setmetatableindex(function(t,k)
+        local v = { n = 0, m = 0 }
+        t[k] = v
+        return v
+    end)
+
+    -- todo: use a simple usernode that refers to a cache so that we don't need to
+    -- make copies
+
+    implement {
+        name      = "localboxmarkonce",
+        public    = true,
+        arguments =  "integer",
+        actions   = function(attr)
+            local c = cache[attr]
+            local n = c.n
+-- first test this:
+--             if n == c.m then
+-- print("all false",attr,n)
+--                 -- all false
+--                 n = 1
+--                 c.m = 0
+--             else
+                n = n + 1
+--             end
+            c[n] = true
+            c.n = n
+            context(n)
+        end
+    }
+
+    local function action(current)
+        local list = getlist(current)
+        if list then
+            local attr = getattribute(list,a_localboxesmark) or 0
+            local cach = attr and cache[lb_index]
+            local once = cach and cach[attr]
+            if once == false then
+                setlist(current)
+                flushlist(list)
+            else
+                setlist(current)
+                local head = copynode(current)
+                setlist(head,list)
+                setbox("localboxcontentbox",head)
+                expandmacro("localboxcommand") -- no longer pass arguments
+                local box = takebox("localboxcontentbox")
+                setlist(current,box)
+                if once and cach[attr] == true then
+                    cach[attr] = false
+                    cach.m = cach.m + 1
+                end
+            end
+        end
+    end
+
+    -- these two are now more or less the same so ...
+
+    local function processleftbox(box)
+        local list = getlist(box)
+        for current, id, subtype in traverse_list, list do
+            if subtype == local_box_code and getwidth(current) == 0 then
+                local index = getindex(current)
+                if index then
+                    lb_found    = current
+                    lb_index    = index
+                    lb_progress = rangedimensions(box,list,current)
+                    action(current)
+                end
+            end
+        end
+    end
+
+    local function processrightbox(box)
+        local list = getlist(box)
+        for current, id, subtype in traverse_list, list do
+            if subtype == local_box_code and getwidth(current) == 0 then
+                local index = getindex(current)
+                if index then
+                    lb_found    = current
+                    lb_index    = index
+                    lb_progress = rangedimensions(box,list,current)
+                    action(current)
+                end
+            end
+        end
+    end
+
+    local function processmiddlebox(box,line)
+        local list = getlist(box)
+        for current, id, subtype in traverse_list, list do
+            if subtype == local_box_code and getwidth(current) == 0 then
+                local index = getindex(current)
+                if index then
+                    lb_found    = current
+                    lb_index    = index
+                    lb_progress = rangedimensions(line,getlist(line),box)
+                    action(current)
+                end
+            end
+        end
+    end
+
+    local function processlocalboxes(line,leftbox,rightbox,middlebox,linenumber,leftskip,rightskip,lefthang,righthang,indent,parinitleftskip,parinitrightskip,parfillleftskip,parfillrightskip,overshoot)
+        --
+        lb_found            = nil
+        lb_index            = 0
+        lb_linenumber       = linenumber
+        lb_progress         = 0
+        lb_leftskip         = leftskip
+        lb_rightskip        = rightskip
+        lb_lefthang         = lefthang
+        lb_righthang        = righthang
+        lb_indent           = indent
+        lb_parfillleftskip  = parfillleftskip
+        lb_parfillrightskip = parfillrightskip
+        lb_parinitleftskip  = parinitleftskip
+        lb_parinitrightskip = parinitrightskip
+        lb_overshoot        = overshoot
+        lb_linewidth        = getwidth(line)
+        -- only true for soem cases
+        lb_leftoffset       = leftskip  + lefthang  + parfillleftskip  + parinitleftskip  + indent
+        lb_rightoffset      = rightskip + righthang + parfillrightskip + parinitrightskip - overshoot
+        --
+        if leftbox then
+            lb_localwidth = getwidth(leftbox)
+            processleftbox(leftbox)
+        end
+        if middlebox then
+            lb_localwidth = getwidth(middlebox)
+            processmiddlebox(middlebox,line)
+        end
+        if rightbox then
+            lb_localwidth = getwidth(rightbox)
+            processrightbox(rightbox)
+        end
+    end
+
+    typesetters.localboxes.handler = processlocalboxes
+
+end
+
+local localboxactions = nodes.tasks.actions("localboxes")
+
+function builders.local_box_filter(...)
+    starttiming(builders)
+    localboxactions(...)
+    stoptiming(builders)
+end
+
+callbacks.register("local_box_filter", builders.local_box_filter, "process local boxes")

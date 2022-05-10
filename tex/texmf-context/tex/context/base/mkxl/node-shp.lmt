@@ -1,0 +1,209 @@
+if not modules then modules = { } end modules ['node-shp'] = {
+    version   = 1.001,
+    optimize  = true,
+    comment   = "companion to node-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local next, type = next, type
+local format = string.format
+local setmetatableindex = table.setmetatableindex
+
+local nodes        = nodes
+local tasks        = nodes.tasks
+local handlers     = nodes.handlers
+
+local nodecodes    = nodes.nodecodes
+local hlist_code   = nodecodes.hlist
+local vlist_code   = nodecodes.vlist
+
+local nuts         = nodes.nuts
+local tonut        = nuts.tonut
+
+local nextnode     = nuts.traversers.node
+local getlist      = nuts.getlist
+local getbox       = nuts.getbox
+
+local implement    = interfaces.implement
+
+local v_yes        = interfaces.variables.yes
+
+local actions = tasks.actions("shipouts")
+
+handlers.finalizelist = actions
+
+function handlers.finalizebox(box)
+    actions(getbox(box)) -- nut
+end
+
+function handlers.finalizelist(list)
+    actions(list) -- nut
+end
+
+do
+
+    local flattendiscretionaries = nuts.flattendiscretionaries
+    local softenhyphens          = nuts.softenhyphens
+
+    local report  = logs.reporter("shipout")
+
+    local trace   = false  trackers.register("backend", "cleanup", function(v) trace = v end)
+
+    local flatten = true -- always true
+    local soften  = true -- true by default
+
+    nodes.handlers.cleanuppage = function(head)
+        local count    = 0
+        local found    = 0
+        local replaced = 0
+        if flatten then
+            head, count = flattendiscretionaries(head)
+        end
+        if soften then
+            head, found, replaced = softenhyphens(head) -- could have been a lua loop
+        end
+        if trace then
+            report("%i discretionaries flattened, %i of %i discretionary hyphens softened",count,replaced,found)
+        end
+        return head
+    end
+
+    implement {
+        name      = "setsofthyphens",
+        arguments = "string",
+        actions   = function(v)
+            soften = v == v_yes
+        end
+    }
+
+end
+
+-- interface
+
+implement {
+    name      = "finalizebox",
+    arguments = "integer",
+    actions   = handlers.finalizebox,
+}
+
+-- just in case we want to optimize lookups:
+
+local frequencies = { }
+
+nodes.tracers.frequencies = frequencies
+
+local data = { }
+local done = false
+
+setmetatableindex(data,function(t,k)
+    local v = { }
+    setmetatableindex(v,function(t,k)
+        local v = { }
+        t[k] = v
+        setmetatableindex(v,function(t,k)
+            t[k] = 0
+            return 0
+        end)
+        return v
+    end)
+    t[k] = v
+    return v
+end)
+
+local function count(head,data,subcategory)
+    -- no components, pre, post, replace .. can maybe an option .. but
+    -- we use this for optimization so it makes sense to look the the
+    -- main node only
+    for n, id in nextnode, tonut(head) do
+        local dn = data[nodecodes[id]] -- we could use id and then later convert to nodecodes
+        dn[subcategory] = dn[subcategory] + 1
+        if id == hlist_code or id == vlist_code then
+            count(getlist(n),data,subcategory)
+        end
+    end
+end
+
+local function register(category,subcategory)
+    return function(head)
+        done = true
+        count(head,data[category],subcategory)
+        return head, false
+    end
+end
+
+frequencies.register = register
+frequencies.filename = nil
+
+trackers.register("nodes.frequencies",function(v)
+    if type(v) == "string" then
+        frequencies.filename = v
+    end
+    handlers.frequencies_shipouts_before   = register("shipouts",   "begin")
+    handlers.frequencies_shipouts_after    = register("shipouts",   "end")
+    handlers.frequencies_processors_before = register("processors", "begin")
+    handlers.frequencies_processors_after  = register("processors", "end")
+    tasks.prependaction("shipouts",   "before", "nodes.handlers.frequencies_shipouts_before")
+    tasks.appendaction ("shipouts",   "after",  "nodes.handlers.frequencies_shipouts_after")
+    tasks.prependaction("processors", "before", "nodes.handlers.frequencies_processors_before")
+    tasks.appendaction ("processors", "after",  "nodes.handlers.frequencies_processors_after")
+end)
+
+statistics.register("node frequencies", function()
+    if done then
+        local filename = frequencies.filename or (tex.jobname .. "-frequencies.lua")
+        io.savedata(filename,table.serialize(data,true))
+        return format("saved in %q",filename)
+    end
+end)
+
+do -- for the moment:
+
+    local whatsitcodes = nodes.whatsitcodes
+    local whatsit_code = nodecodes.whatsit
+
+    local removables   = {
+        [whatsitcodes.open]    = true,
+        [whatsitcodes.close]   = true,
+        [whatsitcodes.write]   = true,
+        [whatsitcodes.savepos] = true,
+        [whatsitcodes.latelua] = true,
+    }
+
+    local setlist = nuts.setlist
+    local getlist = nuts.getlist
+    local remove  = nuts.remove
+
+    local function cleanup(head)
+        for current, id, subtype in nextnode, head do
+            if id == whatsit_code then
+                if removables[subtype] then
+                    head = remove(head,current,true)
+                end
+            elseif id == hlist_code or id == vlist_code then
+                local sl = getlist(current)
+                if sl then
+                    local rl = cleanup(sl)
+                    if rl ~= sl then
+                        setlist(current,rl)
+                    end
+                end
+            end
+        end
+        return head
+    end
+
+    function handlers.cleanupbox(box)
+        cleanup(getbox(box))
+    end
+
+    implement {
+        name      = "cleanupbox",
+        public    = true,
+        protected = true,
+        actions   = handlers.cleanupbox,
+        arguments = "integerargument"
+    }
+
+end

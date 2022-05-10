@@ -1,0 +1,94 @@
+if not modules then modules = { } end modules ['libs-imp-imagemagick'] = {
+    version   = 1.001,
+    comment   = "companion to luat-lib.mkxl",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files",
+}
+
+-- \registerctxluafile{libs-imp-imagemagick}{autosuffix}
+-- \starttext
+--     \startluacode
+--         utilities.imagemagick.convert {
+--             inputname  = "hacker.jpg",
+--             outputname = "m_k_v_i_hacker.png",
+--             options    = { "-rotate", 90, "-noise", 2 },
+--         }
+--         context.externalfigure { "hacker.png" }
+--     \stopluacode
+-- \stoptext
+
+local libname = "imagemagick"
+local libfile = { "CORE_RL_MagickCore_", "CORE_RL_MagickWand_" }
+
+local imlib = resolvers.libraries.validoptional(libname)
+
+if not imlib then return end
+
+local function okay()
+    if resolvers.libraries.optionalloaded(libname,libfile) then
+        okay = function() return true end
+    else
+        okay = function() return false end
+    end
+    return okay()
+end
+
+local imagemagick     = utilities.imagemagick or { }
+utilities.imagemagick = imagemagick
+
+local im_execute = imlib.execute
+local nofruns    = 0
+local report     = logs.reporter(libname)
+
+function imagemagick.convert(specification)
+    if okay() then
+        --
+        nofruns = nofruns + 1
+        statistics.starttiming(imagemagick)
+        --
+        local inputname  = specification.inputname
+        if not inputname or inputname == "" then
+            report("invalid run %s, no inputname specified",nofruns)
+            statistics.stoptiming(imagemagick)
+            return false
+        end
+        local outputname = specification.outputname
+        if not outputname or outputname == "" then
+            outputname = file.replacesuffix(inputname,"pdf")
+        end
+        --
+        if not lfs.isfile(inputname) then
+            report("invalid run %s, input file %a is not found",nofruns,inputname)
+            statistics.stoptiming(imagemagick)
+            return false
+        end
+        --
+        report("run %s, input file %a, outputfile %a",nofruns,inputname,outputname)
+        --
+        specification.inputfile  = inputname
+        specification.outputfile = outputname
+        --
+        local okay, detail = im_execute(specification)
+        if not okay then
+            report("error %a (make sure options start with one -) ",detail)
+        end
+        --
+        statistics.stoptiming(imagemagick)
+    end
+end
+
+function imagemagick.statistics(feedback)
+    local runtime = statistics.elapsedtime(imagemagick)
+    if feedback then
+        report("nofruns %s, runtime %s",nofruns,runtime)
+    else
+        return {
+            runtime = runtime,
+            nofruns = nofruns,
+        }
+    end
+end
+
+-- imagemagick.convert { inputname = "t:/sources/hacker.jpg", outputname = "e:/tmp/hacker.png" }
+-- imagemagick.statistics(true)

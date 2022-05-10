@@ -1,0 +1,1577 @@
+if not modules then modules = { } end modules ['lang-ini'] = {
+    version   = 1.001,
+    comment   = "companion to lang-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+-- needs a cleanup (share locals)
+-- discard language when redefined
+
+-- 002D : hyphen-minus (ascii)
+-- 002D : hyphen-minus (ascii)
+-- 2010 : hyphen
+-- 2011 : nonbreakable hyphen
+-- 2013 : endash (compound hyphen)
+
+-- todo: no foo:bar but foo(bar,...)
+
+-- https://wortschatz.uni-leipzig.de/de/download/German : lots of lists
+
+local type, tonumber, next = type, tonumber, next
+local utfbyte, utflength = utf.byte, utf.length
+local format, gsub, gmatch, find = string.format, string.gsub, string.gmatch, string.find
+local concat, sortedkeys, sortedhash, keys, insert, tohash = table.concat, table.sortedkeys, table.sortedhash, table.keys, table.insert, table.tohash
+local setmetatableindex = table.setmetatableindex
+local utfvalues, strip, utfcharacters = string.utfvalues, string.strip, utf.characters
+
+local context   = context
+local commands  = commands
+local implement = interfaces.implement
+
+local settings_to_array = utilities.parsers.settings_to_array
+local settings_to_set   = utilities.parsers.settings_to_set
+
+local trace_patterns = false  trackers.register("languages.patterns", function(v) trace_patterns = v end)
+local trace_goodies  = false  trackers.register("languages.goodies",  function(v) trace_goodies  = v end)
+local trace_applied  = false  trackers.register("languages.applied",  function(v) trace_applied  = v end)
+
+local report_initialization = logs.reporter("languages","initialization")
+local report_goodies        = logs.reporter("languages","goodies")
+
+local prehyphenchar    = language.prehyphenchar    -- global per language
+local posthyphenchar   = language.posthyphenchar   -- global per language
+local preexhyphenchar  = language.preexhyphenchar  -- global per language
+local postexhyphenchar = language.postexhyphenchar -- global per language
+----- lefthyphenmin    = language.lefthyphenmin
+----- righthyphenmin   = language.righthyphenmin
+local sethjcode        = language.sethjcode
+local currentlanguage  = language.current -- or function() return tex.normallanguage or tex.language end
+
+local uccodes          = characters.uccodes
+local lccodes          = characters.lccodes
+
+local new_language     = language.new
+
+languages              = languages or {}
+local languages        = languages
+
+languages.version      = 1.010
+
+languages.registered   = languages.registered or { }
+local registered       = languages.registered
+
+languages.associated   = languages.associated or { }
+local associated       = languages.associated
+
+languages.numbers      = languages.numbers    or { }
+local numbers          = languages.numbers
+
+languages.data         = languages.data       or { }
+local data             = languages.data
+
+storage.register("languages/registered",registered,"languages.registered")
+storage.register("languages/associated",associated,"languages.associated")
+storage.register("languages/numbers",   numbers,   "languages.numbers")
+storage.register("languages/data",      data,      "languages.data")
+
+local variables = interfaces.variables
+
+local v_reset   = variables.reset
+local v_yes     = variables.yes
+
+local nofloaded  = 0
+
+local function resolve(tag)
+    local data, instance = registered[tag], nil
+    if data then
+        instance = data.instance
+        if not instance then
+            instance = new_language(data.number)
+            data.instance = instance
+        end
+    end
+    return data, instance
+end
+
+local function tolang(what) -- returns lang object
+    if not what then
+        what = currentlanguage()
+    end
+    if type(what) == "userdata" then
+        return what
+    end
+    local tag = numbers[what]
+    local data = tag and registered[tag] or registered[what]
+    if data then
+        local instance = data.instance -- .lang -- was this ok ?
+        if not instance then
+            instance = new_language(data.number)
+            data.instance = instance
+        end
+        return instance
+    end
+end
+
+function languages.getdata(tag) -- or number
+    if tag then
+        return registered[tag] or registered[numbers[tag]]
+    else
+        return registered[numbers[currentlanguage()]]
+    end
+end
+
+languages.tolang = tolang
+
+-- patterns=en
+-- patterns=en,de
+
+local function validdata(loaded,what,tag)
+    local dataset = loaded[what]
+    if dataset then
+        local data = dataset.data
+        if not data or data == "" then
+            -- nothing
+        elseif dataset.compression == "zlib" then
+            data = zlib.decompress(data)
+            if dataset.length and dataset.length ~= #data then
+                report_initialization("compression error in %a for language %a","patterns",what,tag)
+            end
+            return data
+        else
+            return data
+        end
+    end
+end
+
+-- languages.hjcounts[unicode].count
+
+-- hjcode: 0       not to be hyphenated
+--         1--31   length
+--         32      zero length
+--         > 32    hyphenated with length 1
+
+local function sethjcodes(instance,loaded,what,factor)
+    local l = loaded[what]
+    local c = l and l.characters
+    if c then
+        local hjcounts = factor and languages.hjcounts or false
+        --
+        local h = loaded.codehash
+        if not h then
+            h = { }
+            loaded.codehash = h
+        end
+        --
+        local function setcode(code)
+            local l = lccodes[code] -- just in case we get a mixture
+            local u = uccodes[code] -- just in case we get a mixture
+            local s = l
+            if type(s) ~= "number" then
+                l = code
+                s = code
+            end
+            if hjcounts then
+                local c = hjcounts[s]
+                if c then
+                    c = c.count
+                    if not c then
+                        -- error, keep as 1
+                    elseif c <= 0 then
+                        -- counts as 0 i.e. ignored
+                        s = 32
+                    elseif c >= 31 then
+                        -- counts as 31
+                        s = 31
+                    else
+                        -- count c times
+                        s = c
+                    end
+                end
+            end
+            sethjcode(instance,l,s)
+            if u ~= l and type(u) == "number" then
+                sethjcode(instance,u,s)
+                h[u] = s
+            end
+        end
+        --
+        local s = tex.savinghyphcodes
+        tex.savinghyphcodes = 0
+        if type(c) == "table" then
+            if #c > 0 then
+                -- list: { U, U, U, "chr", "chr", ... }
+                for i=1,#c do
+                    local v = c[i]
+                    setcode(type(v) == "string" and utfbyte(v) or v)
+                end
+            else
+                -- hash: { ["chr"] = true, ... }
+               for k, v in sortedhash(c) do
+                    if v then
+                        setcode(utfbyte(k))
+                    end
+                end
+            end
+        elseif type(c) == "string" then
+            for l in utfvalues(c) do
+                setcode(l)
+            end
+        end
+        tex.savinghyphcodes = s
+    end
+end
+
+local function addhjcodestoinstance(instance,characters)
+    if type(characters) == "table" then
+        local nofcharacters = #characters
+        if nofcharacters > 0 then
+            -- list: { U, U, U, "chr", "chr", ... }
+            for i=1,nofcharacters do
+                local v = characters[i]
+                local h = type(v) == "string" and utfbyte(v) or v
+                sethjcode(instance,h,h)
+            end
+        else
+            -- hash: { ["chr"] = true, ... }
+            for k, v in next, characters do
+                if v then
+                    local h = type(k) == "string" and utfbyte(k) or k
+                    sethjcode(instance,h,h)
+                end
+            end
+        end
+    elseif type(characters) == "string" then
+        for h in utfvalues(characters) do
+            sethjcode(instance,h,h)
+        end
+    end
+end
+
+-- 2'2 conflicts with 4' ... and luatex barks on it
+
+local P, S, R, C, Cs, Ct, lpegmatch, lpegpatterns = lpeg.P, lpeg.S, lpeg.R, lpeg.C, lpeg.Cs, lpeg.Ct, lpeg.match, lpeg.patterns
+
+local utfsplit = utf.split
+
+local space       = lpegpatterns.space
+local whitespace  = lpegpatterns.whitespace^1
+local nospace     = lpegpatterns.utf8char - whitespace
+local digit       = lpegpatterns.digit
+----- endofstring = #whitespace + P(-1)
+local endofstring = #whitespace
+
+local word        = (digit/"")^0 * (digit/"" * endofstring + digit/" " + nospace)^1
+local anyword     = (1-whitespace)^1
+local analyze     = Ct((whitespace + Cs(word))^1)
+
+local function unique(tag,requested,loaded)
+    local nofloaded = #loaded
+    if nofloaded == 0 then
+        return ""
+    elseif nofloaded == 1 then
+        return loaded[1]
+    else
+        insert(loaded,1," ") -- no need then for special first word
+     -- insert(loaded,  " ")
+        loaded = concat(loaded," ")
+        local t = lpegmatch(analyze,loaded) or { }
+        local h = { }
+        local b = { }
+        for i=1,#t do
+            local ti = t[i]
+            local hi = h[ti]
+            if not hi then
+                h[ti] = 1
+            elseif hi == 1 then
+                h[ti] = 2
+                b[#b+1] = utfsplit(ti," ")
+            end
+        end
+        -- sort
+        local nofbad = #b
+        if nofbad > 0 then
+            local word
+            for i=1,nofbad do
+                local bi = b[i]
+                local p = P(bi[1])
+                for i=2,#bi do
+                    p = p * digit * P(bi[i])
+                end
+                if word then
+                    word = word + p
+                else
+                    word = p
+                end
+                report_initialization("language %a, patterns %a, discarding conflict (0-9)%{[0-9]}t(0-9)",tag,requested,bi)
+            end
+            t, h, b = nil, nil, nil -- permit gc
+            local someword = digit^0 * word * digit^0 * endofstring / ""
+         -- local strip    = Cs(someword^-1 * (someword + anyword + whitespace)^1)
+            local strip    = Cs((someword + anyword + whitespace)^1)
+            return lpegmatch(strip,loaded) or loaded
+        else
+            return loaded
+        end
+    end
+end
+
+local shared = false
+
+local function loaddefinitions(tag,specification)
+    statistics.starttiming(languages)
+    local data, instance = resolve(tag)
+    local requested = specification.patterns or ""
+    local definitions = settings_to_array(requested)
+    if #definitions > 0 then
+        if trace_patterns then
+            report_initialization("pattern specification for language %a: %s",tag,specification.patterns)
+        end
+        local ploaded = instance:patterns()
+        local eloaded = instance:hyphenation()
+        if not ploaded or ploaded == ""  then
+            ploaded = { }
+        else
+            ploaded = { ploaded }
+        end
+        if not eloaded or eloaded == ""  then
+            eloaded = { }
+        else
+            eloaded = { eloaded }
+        end
+        local dataused  = data.used
+        local ok        = false
+        local resources = data.resources or { }
+        data.resources  = resources
+        if not shared then
+            local found = resolvers.findfile("lang-exc.lua")
+            if found then
+                shared = dofile(found)
+                if type(shared) == "table" then
+                    shared = concat(shared," ")
+                else
+                    shared = true
+                end
+            else
+                shared = true
+            end
+        end
+        for i=1,#definitions do
+            local definition = definitions[i]
+            if definition == "" then
+                -- error
+            elseif definition == v_reset then
+                if trace_patterns then
+                    report_initialization("clearing patterns for language %a",tag)
+                end
+                instance:clearpatterns()
+                instance:clearhyphenation()
+                ploaded = { }
+                eloaded = { }
+            elseif not dataused[definition] then
+                dataused[definition] = definition
+                local filename = "lang-" .. definition .. ".lua"
+                local fullname = resolvers.findfile(filename) or ""
+                if fullname == "" then
+                    fullname = resolvers.findfile(filename .. ".gz") or ""
+                end
+                if fullname ~= "" then
+                    if trace_patterns then
+                        report_initialization("loading definition %a for language %a from %a",definition,tag,fullname)
+                    end
+                    local suffix, gzipped = gzip.suffix(fullname)
+                    local loaded = table.load(fullname,gzipped and gzip.load)
+                    if loaded then -- todo: version test
+                        ok, nofloaded = true, nofloaded + 1
+                        sethjcodes(instance,loaded,"patterns",specification.factor)
+                        sethjcodes(instance,loaded,"exceptions",specification.factor)
+                        local p = validdata(loaded,"patterns",tag)
+                        local e = validdata(loaded,"exceptions",tag)
+                        if p and p ~= "" then
+                            ploaded[#ploaded+1] = p
+                        end
+                        if e and e ~= "" then
+                            eloaded[#eloaded+1] = e
+                        end
+                        resources[#resources+1] = loaded -- so we can use them otherwise
+                    else
+                        report_initialization("invalid definition %a for language %a in %a",definition,tag,filename)
+                    end
+                elseif trace_patterns then
+                    report_initialization("invalid definition %a for language %a in %a",definition,tag,filename)
+                end
+            elseif trace_patterns then
+                report_initialization("definition %a for language %a already loaded",definition,tag)
+            end
+        end
+        if #ploaded > 0 then
+            -- why not always clear
+            instance:clearpatterns()
+            instance:patterns(unique(tag,requested,ploaded))
+        end
+        if #eloaded > 0 then
+            -- why not always clear
+            instance:clearhyphenation()
+            instance:hyphenation(concat(eloaded," "))
+        end
+        if type(shared) == "string" then
+            instance:hyphenation(shared)
+        end
+        return ok
+    elseif trace_patterns then
+        report_initialization("no definitions for language %a",tag)
+    end
+    statistics.stoptiming(languages)
+end
+
+storage.shared.noflanguages = storage.shared.noflanguages or 0
+
+local noflanguages = storage.shared.noflanguages
+
+function languages.define(tag,parent)
+    noflanguages = noflanguages + 1
+    if trace_patterns then
+        report_initialization("assigning number %a to %a",noflanguages,tag)
+    end
+    numbers[noflanguages] = tag
+    registered[tag] = {
+        tag      = tag,
+        parent   = parent or "",
+        patterns = "",
+        loaded   = false,
+        used     = { },
+        dirty    = true,
+        number   = noflanguages,
+        instance = nil, -- luatex data structure
+        synonyms = { },
+    }
+    storage.shared.noflanguages = noflanguages
+end
+
+function languages.setsynonym(synonym,tag) -- convenience function
+    local l = registered[tag]
+    if l then
+        l.synonyms[synonym] = true -- maybe some day more info
+    end
+end
+
+function languages.installed(separator)
+    return concat(sortedkeys(registered),separator or ",")
+end
+
+function languages.current(n)
+    return numbers[n and tonumber(n) or currentlanguage()]
+end
+
+function languages.associate(tag,script,language) -- not yet used
+    associated[tag] = { script, language }
+end
+
+function languages.association(tag) -- not yet used
+    if not tag then
+        tag = numbers[currentlanguage()]
+    elseif type(tag) == "number" then
+        tag = numbers[tag]
+    end
+    local lat = tag and associated[tag]
+    if lat then
+        return lat[1], lat[2]
+    end
+end
+
+function languages.loadable(tag,defaultlanguage) -- hack
+    local l = registered[tag] -- no synonyms
+    if l and resolvers.findfile("lang-"..l.patterns..".lua") then
+        return true
+    else
+        return false
+    end
+end
+
+-- a bit messy, we will do all language setting in lua as we can now assign
+-- and 'patterns' will go away here.
+
+function languages.unload(tag)
+    local l = registered[tag]
+    if l then
+        l.dirty = true
+    end
+end
+
+-- not that usefull, global values
+
+function languages.prehyphenchar   (what) return prehyphenchar   (tolang(what)) end
+function languages.posthyphenchar  (what) return posthyphenchar  (tolang(what)) end
+function languages.preexhyphenchar (what) return preexhyphenchar (tolang(what)) end
+function languages.postexhyphenchar(what) return postexhyphenchar(tolang(what)) end
+-------- languages.lefthyphenmin   (what) return lefthyphenmin   (tolang(what)) end
+-------- languages.righthyphenmin  (what) return righthyphenmin  (tolang(what)) end
+
+-- e['implementer']= 'imple{m}{-}{-}menter'
+-- e['manual'] = 'man{}{}{}'
+-- e['as'] = 'a-s'
+-- e['user-friendly'] = 'user=friend-ly'
+-- e['exceptionally-friendly'] = 'excep-tionally=friend-ly'
+
+local invalid = { "{", "}", "(", ")", "-", " " }
+
+local function collecthjcodes(data,str)
+    local found = data.extras and data.extras.characters or { }
+    if type(str) == "string" then
+        for s in utfcharacters(str) do
+            if not found[s] then
+                found[s] = true
+            end
+        end
+    elseif type(str) == "table" then
+        for i=1,#str do
+            local s = str[i]
+            if not found[s] then
+                found[s] = true
+            end
+        end
+    end
+    for i=1,#invalid do -- less checks this way
+        local c = invalid[i]
+        if found[c] then
+            found[c] = nil
+        end
+    end
+    data.extras = { characters = found }
+    sethjcodes(data.instance,data,"extras",data.factor)
+end
+
+function languages.loadwords(tag,filename)
+    local data, instance = resolve(tag)
+    if data then
+        statistics.starttiming(languages)
+        local str = io.loaddata(filename) or ""
+        collecthjcodes(data,str)
+        instance:hyphenation(str)
+        statistics.stoptiming(languages)
+    end
+end
+
+
+function languages.setexceptions(tag,str)
+    local data, instance = resolve(tag)
+    if data then
+        str = strip(str) -- we need to strip leading spaces
+        collecthjcodes(data,str)
+        instance:hyphenation(str)
+    end
+end
+
+function languages.setpatterns(tag,str)
+    local data, instance = resolve(tag)
+    if data then
+        str = strip(str) -- we need to strip leading spaces
+        collecthjcodes(data,str)
+        instance:patterns(str)
+    end
+end
+
+local function setwordhandler(tag,action)
+    local data, instance = resolve(tag)
+    if data then
+        instance:setwordhandler(action)
+    end
+end
+
+languages.setwordhandler = setwordhandler
+
+function languages.setoptions(tag,str)
+    languages.addgoodiesdata(tag,{ { words = str } })
+    -- for now:
+    languages.setgoodieshandler { tag = tag, goodies = tag }
+end
+
+function languages.hyphenate(tag,str)
+    -- todo: does this still work?
+    local data, instance = resolve(tag)
+    if data then
+        return instance:hyphenate(str)
+    else
+        return str
+    end
+end
+
+-- This code is here for some testing (and discussion) but it might end up in its
+-- own module. I wrote it after listening to the end March 2021 live concert of
+-- Mandoki Soulmates: Hungarian Pictures (music is the greatest unifier) with his
+-- usual incredible international lineup. After that, and realizing that we needed
+-- to deal better with some language issues as follow up on a mailing list thread, I
+-- needed only a few loops of relistening the concert to implement it. In
+-- restrospect this was a language feature that should have been there a while ago.
+
+local expand ; do
+
+    local nuts        = nodes.nuts
+    local nextglyph   = nuts.traversers.glyph
+    local setoptions  = nuts.setoptions
+
+    local getnext     = nuts.getnext
+    local getprev     = nuts.getprev
+    local setchar     = nuts.setchar
+    local setnext     = nuts.setnext
+    local setlink     = nuts.setlink
+    local setfield    = nuts.setfield
+    local setdisc     = nuts.setdisc
+    local getprop     = nuts.getprop
+    local setprop     = nuts.setprop
+    local setattrlist = nuts.setattrlist
+
+    local new_disc    = nuts.pool.disc
+    local new_glyph   = nuts.pool.glyph
+    local copy_node   = nuts.copy
+    local flushlist   = nuts.flushlist
+
+    local glyphoptioncodes      = tex.glyphoptioncodes
+
+    local lower                 = characters.lower
+    local replacer              = utf.replacer
+    local utfchartabletopattern = lpeg.utfchartabletopattern
+
+    local report                = logs.reporter("languages","goodies")
+
+    -- can be shared
+
+    local goodiesdata = setmetatableindex(function(t,k)
+        local v = {
+            properties    = { },
+            replacements  = { },
+            characters    = { },
+            exceptions    = { },
+            substitutions = { },
+        }
+        t[k] = v
+        return v
+    end)
+
+    -- can be a helper
+
+    local compound_disc_code = tex.discoptioncodes.preword | tex.discoptioncodes.postword
+
+    local function setcompound(current,id,first,last,lh,rh,hyphen)
+        local prev     = getprev(current)
+     -- local language = tolang(id)
+     -- local prechar  = prehyphenchar(language)
+     -- local postchar = posthyphenchar(language)
+        local prechar  = prehyphenchar(id)
+        local postchar = posthyphenchar(id)
+        local pre      = prechar  and copy_node(current)
+        local post     = postchar and copy_node(current)
+        local replace  = hyphen and prechar and copy_node(current)
+        local disc     = new_disc()
+        if pre then
+            setchar(pre,prechar)
+        end
+        if post then
+            setchar(post,postchar)
+        end
+        if replace then
+            setchar(replace,prechar)
+        end
+        setattrlist(disc,current)
+        setoptions(disc,0x3) -- todo foo_code
+        setdisc(disc,pre,post,replace)
+        setlink(prev,disc,current)
+        if lh then
+            setfield(first,"rhmin",rh)
+        end
+
+        if rh then
+            setfield(current,"lhmin",lh)
+        end
+
+    end
+
+    local setcompounds = setmetatableindex(function(t,l)
+        local v = setmetatableindex(function(t,r)
+            local v = function(current,id,first,last) return setcompound(current,id,first,last,l,r) end
+            t[r] = v
+            return v
+        end)
+        t[l] = v
+        return v
+    end)
+
+    local sethyphens = setmetatableindex(function(t,l)
+        local v = setmetatableindex(function(t,r)
+            local v = function(current,id,first,last) return setcompound(current,id,first,last,l,r,true) end
+            t[r] = v
+            return v
+        end)
+        t[l] = v
+        return v
+    end)
+
+    local function replaceword(first,last,old,new,oldlen)
+        local oldlen = utflength(old)
+        local newlen = utflength(new)
+        if newlen == 0 then
+            -- forget about it
+        elseif newlen <= oldlen then
+            for s in utfvalues(new) do
+                setchar(first,s)
+                first = getnext(first)
+            end
+            if newlen < oldlen then
+                -- first is one ahead
+                local after  = getnext(last)
+                local before = getprev(first)
+                setnext(last)
+                setlink(before,after)
+                flushlist(first)
+            end
+        else
+            local i = 0
+            local l = getnext(last)
+            for s in utfvalues(new) do
+                i = i + 1
+                if i > oldlen then
+                    local g = copy_node(first)
+                    setlink(first,g,l)
+                    setchar(g,s)
+                    first = g
+                elseif i == oldlen then
+                    setchar(first,s)
+                else
+                    setchar(first,s)
+                    first = getnext(first)
+                end
+            end
+        end
+    end
+
+ -- local optioncodes = table.copy(glyphoptioncodes)
+ --
+ -- optioncodes.nokerns     = optioncodes.noleftkern     | optioncodes.norightkern
+ -- optioncodes.noligatures = optioncodes.noleftligature | optioncodes.norightligature
+
+    local lh, rh = false, false
+
+    local cache = setmetatableindex(function(t,k)
+        local v = 0
+        if k == "compound" then
+            v = setcompounds[lh][rh]
+        elseif k == "hyphen" then
+            v = sethyphens[lh][rh]
+        else
+            v = 0
+            for s in gmatch(k,"%w+") do
+                local o = glyphoptioncodes[s]
+             -- local o = optioncodes[s]
+                if o then
+                    v = v | o
+                end
+            end
+        end
+        t[k] = v
+        return v
+    end)
+
+    local function checkglyphproperties(options)
+        -- we sort, just to be sure
+        for word, list in sortedhash(options) do
+            if type(list) == "string" then
+                options[word] = options[list]
+            else
+                for index, option in sortedhash(list) do
+                    if type(option) == "string" then
+                        list[index] = cache[option]
+                    end
+                end
+            end
+        end
+    end
+
+    -- statistics.starttiming(languages)
+    -- statistics.stoptiming(languages)
+
+    -- 1: restart 2: exceptions+patterns 3: patterns *: next word
+
+    local sequencers    = utilities.sequencers
+    local newsequencer  = sequencers.new
+    local appendgroup   = sequencers.appendgroup
+    local prependaction = sequencers.prependaction
+    local appendaction  = sequencers.appendaction
+    local enableaction  = sequencers.enableaction
+    local disableaction = sequencers.disableaction
+
+    local template = {
+        arguments    = "s",
+        returnvalues = "r,i",
+        results      = "r,i",
+    }
+
+    local registeredactions = setmetatableindex ( function(t,tag)
+        local actions = newsequencer(template)
+        appendgroup(actions,"user")
+        t[tag] = actions
+        return actions
+    end )
+
+    languages.registeredactions = registeredactions
+
+    function languages.installhandler(tag,func)
+        local todo = not rawget(registeredactions,tag)
+        local actions = registeredactions[tag]
+        appendaction(actions,"user",func)
+        enableaction(actions,func)
+        report("installing handler %a for language %a",func,tag)
+        if todo then
+            setwordhandler(tag,function(n,original,remapped,length,first,last)
+                local runner = actions.runner
+                if runner then
+                    if getprop(first,"replaced") then
+                        -- maybe some deadcycles
+                    else
+                        local r, result = runner(original)
+                        if not r or original == r then
+                            return result or 0
+                        else
+                            setprop(first,"replaced",true)
+                            replaceword(first,last,original,r,length)
+                            return 1
+                        end
+                    end
+                end
+                return 2
+            end)
+        end
+    end
+
+    local appliedoptions     = setmetatableindex("table")
+    languages.appliedoptions = appliedoptions
+
+    languages.setgoodieshandler = function(specification) -- will become a table specifier
+        if type(specification) == "table" then
+            local tag           = specification.tag
+            local goodies       = specification.goodies or tag
+            local result        = specification.result or 2
+            local data          = goodiesdata[goodies]
+            local properties    = data.properties
+            local replacements  = data.replacements
+            local substitutions = data.substitutions
+            local characters    = data.characters
+            local exceptions    = data.exceptions
+            local replacer      = nil
+            local substituter   = nil
+            local d, instance   = resolve(tag)
+            local done          = false
+            -- check if something at all
+            if type(characters) == "table" and characters and next(characters) then
+                addhjcodestoinstance(instance,characters)
+                if trace_goodies then
+                    report_goodies("registering %a characters for %a",goodies,tag)
+                end
+                done = true
+            end
+            if type(properties) == "table" and next(properties) then
+                checkglyphproperties(properties) -- checks in place!
+                if trace_goodies then
+                    report_goodies("registering %a properties for %a",goodies,tag)
+                end
+                done = true
+            end
+            if type(replacements) == "table" and next(replacements) then
+                replacer = Cs((utfchartabletopattern(replacements) / replacements + 1)^0)
+                if trace_goodies then
+                    report_goodies("registering %a replacer for %a",goodies,tag)
+                end
+                done = true
+            end
+            if type(substitutions) == "table" and next(substitutions) then
+                substituter = Cs((utfchartabletopattern(substitutions) / substitutions + 1)^0)
+                if trace_goodies then
+                    report_goodies("registering %a substitutor for %a",goodies,tag)
+                end
+                done = true
+            end
+            if type(exceptions) == "table" and next(exceptions) then
+                done = true
+            else
+                exceptions = false
+            end
+            if done then
+                local registered = registeredactions[tag]
+                local applied    = appliedoptions[tag]
+                setwordhandler(tag,function(n,original,remapped,length,first,last)
+                    local runner = registered.runner
+                    if runner then
+                        if getprop(first,"replaced") then
+                            -- maybe some deadcycles
+                        else
+                            local r, result = runner(original)
+                            if not r then
+                                if trace_goodies then
+                                    report_goodies("kept by runner: %s => %s, result %i",original,remapped, result or 0)
+                                end
+                                return result or 0
+                            elseif original == r then
+                                if result then
+                                    if trace_goodies then
+                                        report_goodies("kept by runner: %s => %s, result %i",original,remapped, result)
+                                    end
+                                    return result
+                                else
+                                    if trace_goodies then
+                                        report_goodies("kept by runner: %s => %s, continue",original,remapped)
+                                    end
+                                end
+                            else
+                                if trace_goodies then
+                                    report_goodies("replaced by runner: %s => %s => %s, restart",original,remapped,r)
+                                end
+                                setprop(first,"replaced",true)
+                                replaceword(first,last,original,r,length)
+                                return 1
+                            end
+                        end
+                    end
+                    local result = 2
+                    local o = properties[remapped]
+                  ::again::
+                    if o then
+                        if trace_goodies then
+                            report("properties: %s %s",original,remapped)
+                        end
+                        if trace_applied then
+                            applied[original] = (applied[original] or 0) + 1
+                        end
+                        local index = 0
+                        for g, c in nextglyph, first do
+                            index = index + 1
+                            local oi = o[index]
+                            if oi then
+                                if type(oi) == "function" then
+                                    oi(g,n,first,last) -- maybe return value
+                                    result = 1
+                                else
+                                    setoptions(g,oi)
+                                end
+                            end
+                            if g == last then
+                                break
+                            end
+                        end
+                        return result
+                    end
+                    if replacer then
+                        -- todo: check lengths so that we can avoid a check
+                        if getprop(first,"replaced") then
+                            -- maybe some deadcycles
+                        else
+                            local r = lpegmatch(replacer,original)
+                            if original == r then
+                                if trace_goodies then
+                                    report_goodies("kept: %s => %s",original,remapped)
+                                end
+                            else
+                                if trace_goodies then
+                                    report_goodies("replaced: %s => %s => %s",original,remapped,r)
+                                end
+                                setprop(first,"replaced",true)
+                                replaceword(first,last,original,r,length)
+                                result = 1
+                            end
+                        end
+                        return result
+                    end
+                    if substituter then
+                        if getprop(first,"replaced") then
+                            -- maybe some deadcycles
+                        else
+                            local r = lpegmatch(substituter,original)
+                            if original == r then
+                                if trace_goodies then
+                                    report_goodies("kept: %s => %s",original,remapped)
+                                end
+                            else
+                                if trace_goodies then
+                                    report_goodies("substituted: %s => %s => %s",original,remapped,r)
+                                end
+                                setprop(first,"replaced",true)
+                                if not properties[r] then
+                                    o = expand(r)
+                                    properties[original] = o
+                                    goto again
+                                end
+                            end
+                        end
+                    end
+                    if exceptions then
+                        local exception = exceptions[original]
+                        if exception then
+                            if trace_goodies then
+                                report_goodies("exception: %s => %s",original,exception)
+                            end
+                            result = exception
+                        else
+                            result = 3
+                        end
+                        return result
+                    end
+                    if trace_goodies then
+                        report_goodies("ignored: %s => %s",original,remapped)
+                    end
+                    return result
+                end)
+            elseif trace_goodies then
+                report_goodies("nothing useable in %a for %a",goodies,tag)
+            end
+        else
+            setwordhandler(tag)
+        end
+    end
+
+    local norightligature_option = glyphoptioncodes.norightligature
+    local noleftligature_option  = glyphoptioncodes.noleftligature
+    local norightkern_option     = glyphoptioncodes.norightkern
+    local noleftkern_option      = glyphoptioncodes.noleftkern
+
+    local function applyaction(oc,v,n)
+        if oc == "noligature" then
+            if n > 0 then
+                local vv = v[n-1]
+                if vv then
+                    v[n-1] = vv | norightligature_option
+                else
+                    v[n-1] = norightligature_option
+                end
+            end
+            v[n] = noleftligature_option
+        elseif oc == "compound" then
+            if n > 1 then
+             -- v[n] = setcompound
+                v[n] = setcompounds[lh][rh]
+                return true
+            end
+        elseif oc == "hyphen" then
+            if n > 1 then
+                v[n] = sethyphens[lh][rh]
+                return true
+            end
+        elseif oc == "nokern" then
+            if n > 0 then
+                local vv = v[n-1]
+                if vv then
+                    v[n-1] = vv | norightkern_option
+                else
+                    v[n-1] = norightkern_option
+                end
+            end
+            v[n] = noleftkern_option
+        elseif oc == "noleftkern" then
+            v[n] = noleftkern_option
+        elseif oc == "norightkern" then
+            if n > 0 then
+                local vv = v[n-1]
+                if vv then
+                    v[n-1] = vv | norightkern_option
+                else
+                    v[n-1] = norightkern_option
+                end
+            end
+        else
+            for s in gmatch(oc,"%w+") do
+                if applyaction(s,v,n) then
+                    return
+                end
+            end
+        end
+    end
+
+    -- a|b : a:norightligature b:noleftligature
+    -- a=b : a:norightkern     b:noleftkern
+    -- a<b :                   b:noleftkern
+    -- a>b : a:norightkern
+    -- a-b : hyphen
+    -- a+b : compound
+
+    local actions = {
+        ["|"] = "noligature",
+        ["="] = "nokern",
+        ["<"] = "noleftkern",
+        [">"] = "norightkern",
+        ["+"] = "compound",
+        ["-"] = "hyphen",
+    }
+
+    local function analyzed(m,a,t,k)
+        local v = { }
+        local n = 1
+        if m == true then
+            for c in gmatch(k,".") do
+                local ac = a[c]
+                if not ac then
+                    n = n + 1
+                else
+                    applyaction(ac,v,n)
+                end
+            end
+        elseif type(m) == "number" then
+            local i = 0
+            for c in gmatch(k,".") do
+                local ac = a[c]
+                if not ac then
+                    n = n + 1
+                else
+                    i = i + 1
+                    if i == m then
+                        applyaction(ac,v,n)
+                        break
+                    end
+                end
+            end
+        elseif type(m) == "table" then
+            -- happens here, otherwise no stable caching key, we could hash these too
+            m = tohash(m)
+            local i = 0
+            for c in gmatch(k,".") do
+                local ac = a[c]
+                if not ac then
+                    n = n + 1
+                else
+                    i = i + 1
+                    if m[i] then
+                        applyaction(ac,v,n)
+                    end
+                end
+            end
+        else
+            -- error
+        end
+        t[k] = v
+        return v
+    end
+
+    local cache = setmetatableindex(function(t,m)
+        local v = setmetatableindex(function(t,a)
+            local v = setmetatableindex(function(t,k)
+                return analyzed(m,a,t,k)
+            end)
+            t[m] = v
+            return v
+        end)
+        t[m] = v
+        return v
+    end)
+
+    expand = function(str)
+        return analyzed(true,actions,{},str)
+    end
+
+    -- maybe also a skip symbol
+
+    local replace1 = Cs ( ( S("|=<>+-.0123456789")/"" + lpegpatterns.utf8character    )^0 )
+    local replace2 = Cs ( ( S("|=<>+-.0123456789")    + lpegpatterns.utf8character/".")^0 )
+
+    local function stripped(str)
+        -- todo : lpeg
+        str = gsub(str,"%-%-[^\n]*\n","")
+        str = gsub(str,"%%[^\n]*\n","")
+        str = gsub(str,"%s+"," ")
+        str = gsub(str,"^%s+","")
+        str = gsub(str,"%s+$","")
+        return str
+    end
+
+    local registerexceptions  do
+
+        local lbrace   = P("{")
+        local rbrace   = P("}")
+        local lbracket = P("[")
+        local rbracket = P("]")
+        local lparent  = P("(")
+        local rparent  = P(")")
+        local hyphen   = P("-")
+
+        local p = Cs ( (
+            lbrace *  ((1-rbrace)^0) * rbrace
+          * lbrace *  ((1-rbrace)^0) * rbrace
+          * lbrace * C((1-rbrace)^0) * rbrace * (lparent * C((1-rparent)^0) * rparent)^0 / function(a,b) return b or a end
+          + (lbracket * (1-rbracket)^0 * rbracket) / ""
+          + hyphen / ""
+          + lpegpatterns.utf8character
+        )^0 )
+
+        registerexceptions = function(target,str)
+            local kind = type(str)
+            if kind == "string" then
+                for v in gmatch(stripped(str),"%S+") do
+                    local k = lpegmatch(p,v)
+                    if k ~= v then
+                        target[k] = v
+                    end
+                end
+            elseif kind == "table" then
+                local n = #str
+                if n > 0 then
+                    for i=1,n do
+                        local v = str[i]
+                        local k = lpegmatch(p,v)
+                        if k ~= v then
+                            target[k] = v
+                        end
+                    end
+                else
+                    -- maybe check for sanity
+                    for k, v in next, str do
+                        target[k] = v
+                    end
+                end
+            end
+        end
+
+    end
+
+    function languages.strippedgoodiewords(str)
+        return lpegmatch(replace1,stripped(str))
+    end
+
+    local splitter = lpeg.tsplitat(" ")
+
+    local function addgoodies(tag,list,filename)
+        local np = 0
+        local nd = 0
+        local nw = 0
+        local nl = #list
+        --
+        local data          = goodiesdata[tag]
+        local properties    = data.properties
+        local replacements  = data.replacements
+        local substitutions = data.substitutions
+        local characters    = data.characters
+        local exceptions    = data.exceptions
+        if filename then
+            if not data.goodies then
+                data.goodies = { }
+            end
+            insert(data.goodies,filename)
+        end
+        --
+        lh = false
+        rh = false
+        --
+        for i=1,nl do
+            local l = list[i]
+            if type(l) == "table" then
+                local w = l.words
+                local p = l.patterns
+                local s = l.substitutions
+                local c = l.characters
+                local e = l.exceptions
+                lh = l.left  or false -- for practical reasons these are semi-global
+                rh = l.right or false -- for practical reasons these are semi-global
+                if c then
+                    for v in utfvalues(c) do
+                        characters[v] = true
+                    end
+                end
+                if w then
+                    local prefixes    = l.prefixes
+                    local nofprefixes = 0
+                    local suffixes    = l.suffixes
+                    local nofsuffixes = 0
+                    if prefixes then
+                        prefixes    = lpegmatch(splitter,lower(stripped(prefixes)))
+                        nofprefixes = #prefixes
+                    end
+                    if suffixes then
+                        suffixes    = lpegmatch(splitter,lower(stripped(suffixes)))
+                        nofsuffixes = #suffixes
+                    end
+                    w = lower(stripped(w))
+                    if p then
+                        local pattern = Cs((utfchartabletopattern(p) / p + 1)^0)
+                        w = lpegmatch(pattern,w)
+                        np = np + 1
+                    else
+                        nd = nd + 1
+                    end
+                    local m = l.matches
+                    if not m then
+                        m = true
+                    end
+                    local a = l.actions
+                    if a then
+                        setmetatableindex(a,actions)
+                    else
+                        a = actions
+                    end
+                    local cach = cache[m][a]
+                    if nofprefixes > 0 then
+                        if nofsuffixes > 0 then
+                            for wrd in gmatch(w,"%S+") do
+                                properties[lpegmatch(replace1,wrd)] = cach[lpegmatch(replace2,wrd)]
+                                nw = nw + 1
+                                for i=1,nofprefixes do
+                                    local tmp = prefixes[i] .. wrd
+                                    for i=1,nofsuffixes do
+                                        local str = tmp .. suffixes[i]
+                                        properties[lpegmatch(replace1,str)] = cach[lpegmatch(replace2,str)]
+                                        nw = nw + 1
+                                    end
+                                end
+                            end
+                        else
+                            for wrd in gmatch(w,"%S+") do
+                                properties[lpegmatch(replace1,wrd)] = cach[lpegmatch(replace2,wrd)]
+                                nw = nw + 1
+                                for i=1,nofprefixes do
+                                    local str = prefixes[i] .. wrd
+                                    properties[lpegmatch(replace1,str)] = cach[lpegmatch(replace2,str)]
+                                    nw = nw + 1
+                                end
+                            end
+                        end
+                    elseif nofsuffixes > 0 then
+                        for wrd in gmatch(w,"%S+") do
+                            properties[lpegmatch(replace1,wrd)] = cach[lpegmatch(replace2,wrd)]
+                            nw = nw + 1
+                            for i=1,nofsuffixes do
+                                local str = wrd .. suffixes[i]
+                                properties[lpegmatch(replace1,str)] = cach[lpegmatch(replace2,str)]
+                                nw = nw + 1
+                            end
+                        end
+                    else
+                        for wrd in gmatch(w,"%S+") do
+                            properties[lpegmatch(replace1,wrd)] = cach[lpegmatch(replace2,wrd)]
+                            nw = nw + 1
+                        end
+                    end
+                elseif s then
+                    for k, v in next, s do
+                        substitutions[k] = v
+                    end
+                elseif p then
+                    for k, v in next, p do
+                        replacements[k] = v
+                    end
+                elseif e then
+                    registerexceptions(exceptions,e)
+                end
+            end
+        end
+
+        lh = false
+        rh = false
+
+        return { np = np, nd = nd, nw = nw, nl = nl }
+    end
+
+    function languages.goodiefiles(tag)
+        local d = goodiesdata[tag]
+        return d and d.goodies
+    end
+
+    function languages.addgoodiesfile(tag,filename)
+        local fullname = resolvers.findfile(file.addsuffix(filename,"llg")) or ""
+        if fullname == "" then
+            report_goodies("file %a is not found",filename)
+        else
+            local list = table.load(fullname)
+            if not list then
+                report_goodies("file %a is invalid",fullname)
+            else
+                list = list.options
+                if not list then
+                    report_goodies("file %a has no options",fullname)
+                else
+                    local ok = addgoodies(tag,list,filename)
+                    report_goodies("tag %a, file %a loaded, %i lists, %i via patterns, %i direct, %i words",
+                        tag,fullname,ok.nl,ok.np,ok.nd,ok.nw)
+                end
+            end
+        end
+    end
+
+    function languages.addgoodiesdata(tag,list)
+        local ok = addgoodies(tag,list)
+        report_goodies("tag %a, data loaded, %i lists, %i via patterns, %i direct, %i words",
+            tag,ok.nl,ok.np,ok.nd,ok.nw)
+    end
+
+end
+
+if environment.initex then
+
+    function languages.getnumber()
+        return 0
+    end
+
+else
+
+    function languages.getnumber(tag,default,patterns,goodies,factor)
+        local l = registered[tag]
+        if l then
+            if l.dirty then
+                l.factor = factor == v_yes and true or false
+                if trace_patterns then
+                    report_initialization("checking patterns for %a with default %a",tag,default)
+                end
+                -- patterns is already resolved to parent patterns if applicable
+                if patterns and patterns ~= "" then
+                    if l.patterns ~= patterns then
+                        l.patterns = patterns
+                        if trace_patterns then
+                            report_initialization("loading patterns for %a using specification %a",tag,patterns)
+                        end
+                        loaddefinitions(tag,l)
+                    else
+                        -- unchanged
+                    end
+                elseif l.patterns == "" then
+                    l.patterns = tag
+                    if trace_patterns then
+                        report_initialization("loading patterns for %a using tag",tag)
+                    end
+                    local ok = loaddefinitions(tag,l)
+                    if not ok and tag ~= default then
+                        l.patterns = default
+                        if trace_patterns then
+                            report_initialization("loading patterns for %a using default",tag)
+                        end
+                        loaddefinitions(tag,l)
+                    end
+                end
+                if goodies and goodies ~= "" then
+                    goodies = settings_to_array(goodies)
+                    for i=1,#goodies do
+                        local goodie = goodies[i]
+                        -- we can cache this but it doesn't pay off to do so
+                        languages.addgoodiesfile(tag,goodie)
+                    end
+                    languages.setgoodieshandler {
+                        tag     = tag,
+                        goodies = tag,
+                    }
+                end
+                l.loaded = true
+                l.dirty  = false
+            end
+            return l.number
+        else
+            return 0
+        end
+    end
+
+    numbers[0] = "null"
+
+    registered.null = {
+        number   = 0,
+        instance = new_language(0),
+    }
+
+end
+
+-- hyphenation.define        ("zerolanguage")
+-- hyphenation.loadpatterns  ("zerolanguage") -- else bug
+-- hyphenation.loadexceptions("zerolanguage") -- else bug
+
+languages.logger = languages.logger or { }
+
+function languages.logger.report()
+    local result, r = { }, 0
+    for tag, l in sortedhash(registered) do
+        if l.loaded then
+            r = r + 1
+            result[r] = format("%s:%s:%s",tag,l.parent,l.number)
+        end
+    end
+    return r > 0 and concat(result," ") or "none"
+end
+
+-- must happen at the tex end .. will use lang-def.lua
+
+languages.associate('en','latn','eng')
+languages.associate('uk','latn','eng')
+languages.associate('nl','latn','nld')
+languages.associate('de','latn','deu')
+languages.associate('fr','latn','fra')
+
+statistics.register("loaded patterns", function()
+    local result = languages.logger.report()
+    if result ~= "none" then
+     -- return result
+        return format("%s, load time: %s",result,statistics.elapsedtime(languages))
+    end
+end)
+
+-- statistics.register("language load time", function()
+--     -- often zero so we can merge that in the above
+--     return statistics.elapsedseconds(languages, format(", nofpatterns: %s",nofloaded))
+-- end)
+
+-- interface
+
+implement {
+    name      = "languagenumber",
+    actions   = { languages.getnumber, context },
+    arguments = "5 strings"
+}
+
+implement {
+    name      = "installedlanguages",
+    actions   = { languages.installed, context },
+}
+
+implement {
+    name      = "definelanguage",
+    actions   = languages.define,
+    arguments = "2 strings"
+}
+
+implement {
+    name      = "setlanguagesynonym",
+    actions   = languages.setsynonym,
+    arguments = "2 strings"
+}
+
+implement {
+    name      = "unloadlanguage",
+    actions   = languages.unload,
+    arguments = "string"
+}
+
+implement {
+    name      = "setlanguageexceptions",
+    actions   = languages.setexceptions,
+    arguments = "2 strings"
+}
+
+implement {
+    name      = "setlanguagepatterns",
+    actions   = languages.setpatterns,
+    arguments = "2 strings"
+}
+
+implement {
+    name      = "setlanguageoptions",
+    actions   = languages.setoptions,
+    arguments = "2 strings"
+}
+
+implement {
+    name      = "currentprehyphenchar",
+    actions   = function()
+        local c = prehyphenchar(tolang())
+        if c and c > 0 then
+            context.char(c)
+        end
+    end
+}
+
+implement {
+    name      = "currentposthyphenchar",
+    actions   = function()
+        local c = posthyphenchar(tolang())
+        if c and c > 0 then
+            context.char(c)
+        end
+    end
+}

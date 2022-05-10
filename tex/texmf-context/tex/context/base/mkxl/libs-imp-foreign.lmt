@@ -1,0 +1,65 @@
+if not modules then modules = { } end modules ['libs-imp-foreign'] = {
+    version   = 1.001,
+    comment   = "companion to luat-imp-foreign.mkxl",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+-- See libs-imp-foreign.mkxl for some comments.
+
+local report = logs.reporter("foreign")
+
+local libname  = "foreign"
+----- libfile  = "libffi-7"
+local libfile  = "libffi*"
+----- libfile  = "d:/inkscape/bin/libffi-7.dll" -- libffi*
+
+local libforeign = resolvers.libraries.validoptional(libname)
+
+if package.loaded[libname] then
+    return package.loaded[libname]
+end
+
+local function okay()
+    -- Don't worry, when one overloads this flag the engine will abort with an
+    -- error message anyway, but it's less nice.
+    if not status.permit_loadlib then
+        report()
+        report("opening foreign libraries is not enabled")
+        report()
+        os.exit()
+    elseif libforeign and resolvers.libraries.optionalloaded(libname,libfile) then
+        okay = function() return true end
+    else
+        okay = function() return false end
+    end
+    return okay()
+end
+
+local foreignload = libforeign.load
+
+local foreign = {
+    types     = libforeign.types,
+    abivalues = libforeign.abivalues,
+    totable   = libforeign.totable,
+    newbuffer = libforeign.newbuffer,
+    getbuffer = libforeign.getbuffer,
+    load      = function(name)
+       if okay() then
+           local fullname = resolvers.findlib(name)
+           if fullname and fullname ~= "" then
+               return foreignload(fullname)
+           else
+               -- report an error
+           end
+       end
+    end,
+}
+
+-- In due time I'll add the struct and array methods using Lua 5.4 features.
+
+package .loaded[libname] = foreign
+optional.loaded[libname] = foreign
+
+return foreign

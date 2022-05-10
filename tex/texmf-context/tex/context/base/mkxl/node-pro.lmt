@@ -1,0 +1,156 @@
+if not modules then modules = { } end modules ['node-pro'] = {
+    version   = 1.001,
+    comment   = "companion to node-ini.mkiv",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local trace_callbacks  = false  trackers  .register("nodes.callbacks",        function(v) trace_callbacks  = v end)
+local force_processors = false  directives.register("nodes.processors.force", function(v) force_processors = v end)
+
+local report_nodes = logs.reporter("nodes","processors")
+
+local nodes        = nodes
+local tasks        = nodes.tasks
+local nuts         = nodes.nuts
+local tonut        = nodes.tonut
+local tonode       = nodes.tonode
+
+nodes.processors   = nodes.processors or { }
+local processors   = nodes.processors
+
+local tasks        = nodes.tasks
+
+local report_nodes = logs.reporter("nodes","processors")
+
+local countnodes   = nuts.countall
+
+do
+
+    local function reconstruct(head)
+        return ",stream : " .. nodes.listtoutf(head,"",false,nil,true)
+    end
+
+    local before = nil
+    local count  = 0
+    local show   = false
+
+    function processors.trace_glyph_run_b(head,groupcode)
+        count  = count + 1
+        before = countnodes(head)
+    end
+
+    function processors.trace_glyph_run_a(head,groupcode)
+        report_nodes("processors: run %i, group %a, # before %a, # after %s%s",
+            count,groupcode,before,countnodes(head),
+            show and reconstruct(head) or ""
+        )
+        before = false
+    end
+
+    local prependaction = tasks.prependaction
+    local appendaction  = tasks.appendaction
+    local enableaction  = tasks.enableaction
+    local disableaction = tasks.disableaction
+
+    trackers.register("nodes.callbacks", function(v)
+        if not v then
+            disableaction("processors","nodes.processors.trace_glyph_run_b")
+            disableaction("processors","nodes.processors.trace_glyph_run_a")
+        elseif before == nil then
+            prependaction("processors","before","nodes.processors.trace_glyph_run_b",nil,"nonut","enabled")
+            appendaction ("processors","after", "nodes.processors.trace_glyph_run_a",nil,"nonut","enabled")
+            before = false
+        else
+            enableaction("processors","nodes.processors.trace_glyph_run_b")
+            enableaction("processors","nodes.processors.trace_glyph_run_a")
+            show = v == "detail"
+        end
+    end)
+
+end
+
+local glyph_run             = tasks.actions("processors")
+local pre_linebreak_filter  = tasks.actions("paragraphs")
+local post_linebreak_filter = tasks.actions("finalizers")
+
+processors.glyph_run             = glyph_run
+processors.pre_linebreak_filter  = pre_linebreak_filter
+processors.post_linebreak_filter = post_linebreak_filter
+
+callbacks.register("glyph_run",            glyph_run,            "glyph processing")
+callbacks.register("pre_linebreak_filter", pre_linebreak_filter, "horizontal manipulations (before par break)")
+callbacks.register("post_linebreak_filter",post_linebreak_filter,"horizontal manipulations (after par break)")
+
+do
+    local hpack = nodes.hpack
+
+    function nodes.fullhpack(head,...)
+        return hpack((glyph_run(head)),...)
+    end
+
+    local hpack = nuts.hpack
+
+    function nuts.fullhpack(head,...)
+        return hpack(tonut(glyph_run(tonode(head))),...)
+    end
+end
+
+do
+
+    ----- texnest       = tex.nest
+    ----- getnest       = tex.getnest
+
+    local getlist       = nodes.getlist     -- still nodes !
+    local setlist       = nodes.setlist
+    local getsubtype    = nodes.getsubtype
+
+    local linelist_code = nodes.listcodes.line
+
+    local lineactions   = tasks.actions("contributers")
+    local adjustactions = tasks.actions("adjusters")
+
+    -- this was the "contributers" callback but we changed the interface
+
+    -- historically we use a different order than the callback
+
+    function processors.append_line_filter(head,tail,where,index)
+        if tail then
+            if where == "box" then
+                -- here we don't return something, we operate on the line (content)
+                if getsubtype(tail) == linelist_code then -- always
+                    local list = getlist(tail)
+                    if list then
+                        local result = lineactions(list,where,tail,index) -- tail is parent of list
+                        if result and result ~= list then
+                            setlist(tail,result)
+                        end
+                    end
+                end
+            elseif where == "postadjust" or where == "preadjust" then
+                -- we use the same order as for lines
+                return adjustactions(head,where,tail,index)
+            end
+        end
+    end
+
+    callbacks.register("append_line_filter", processors.append_line_filter, "things done with lines")
+
+end
+
+do
+
+    local actions = tasks.actions("alignments")
+
+    function processors.alignment_filter(head,attr,preamble)
+        actions(head,attr,preamble)
+    end
+
+    callbacks.register("alignment_filter", processors.alignment_filter, "things done with alignments")
+
+end
+
+statistics.register("h-node processing time", function()
+    return statistics.elapsedseconds(nodes,"including kernel") -- hm, ok here?
+end)

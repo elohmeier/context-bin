@@ -1,0 +1,227 @@
+if not modules then modules = { } end modules ['luat-cnf'] = {
+    version   = 1.001,
+    comment   = "companion to luat-lib.mkxl",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local type = type
+local format, concat = string.format, table.concat
+
+local report = logs.reporter("system")
+
+luatex       = luatex or { }
+local luatex = luatex
+
+texconfig.functionsize   = 32768
+texconfig.propertiessize = 10000
+
+-- These lists need updating! If we decide to keep them at all.
+
+local stub = [[
+
+-- checking
+
+storage = storage or { }
+luatex  = luatex  or { }
+
+-- as soon as possible
+
+texconfig.functionsize   = 32768
+texconfig.propertiessize = 10000
+
+luatex.starttime = os.gettimeofday()
+
+-- this will happen after the format is loaded
+
+function texconfig.init()
+
+    -- development
+
+    local builtin, globals = { }, { }
+
+    libraries = { -- we set it here as we want libraries also 'indexed'
+        basiclua = {
+            -- always
+            "string", "table", "coroutine", "debug", "file", "io", "lpeg", "math", "os", "package",
+            -- bonus
+            "bit32", "utf8",
+        },
+        basictex = {
+            -- always
+            "callback", "font", "lua", "node", "status", "tex", "texconfig", "texio", "token",
+            -- not in luametatex
+            "img", "pdf", "lang",
+            -- in luametatex
+            "language",
+        },
+        extralua = {
+            -- not in luametatex
+            "unicode", "utf", "gzip",  "zip", "zlib",
+            -- in luametatex
+            "xzip", "xmath", "xcomplex", "xdecimal", "basexx",
+            -- maybe some day in luametatex
+            "lz4", "lzo",
+            -- always (mime can go)
+            "lfs","socket", "mime", "md5", "sha2", "fio", "sio",
+        },
+        extratex = {
+            -- not in luametatex
+            "kpse",
+            -- always
+            "pdfe", "mplib",
+            -- in luametatex
+            "pdfdecode", "pngdecode",
+        },
+        obsolete = {
+            "epdf",
+            "fontloader", -- can be filled by luat-log
+            "kpse",
+        },
+        functions = {
+            "assert", "pcall", "xpcall", "error", "collectgarbage",
+            "dofile", "load","loadfile", "require", "module",
+            "getmetatable", "setmetatable",
+            "ipairs", "pairs", "rawequal", "rawget", "rawset", "next",
+            "tonumber", "tostring",
+            "type", "unpack", "select", "print",
+        },
+        builtin = builtin, -- to be filled
+        globals = globals, -- to be filled
+    }
+
+    for k, v in next, _G do
+        globals[k] = tostring(v)
+    end
+
+    local function collect(t,fnc)
+        local lib = { }
+        for k, v in next, t do
+            if fnc then
+                lib[v] = _G[v]
+            else
+                local keys = { }
+                local gv = _G[v]
+                local tv = type(gv)
+                if tv == "table" then
+                    for k, v in next, gv do
+                        keys[k] = tostring(v) -- true -- by tostring we cannot call overloads functions (security)
+                    end
+                end
+                lib[v] = keys
+                builtin[v] = keys
+            end
+        end
+        return lib
+    end
+
+    libraries.basiclua  = collect(libraries.basiclua)
+    libraries.basictex  = collect(libraries.basictex)
+    libraries.extralua  = collect(libraries.extralua)
+    libraries.extratex  = collect(libraries.extratex)
+    libraries.functions = collect(libraries.functions,true)
+    libraries.obsolete  = collect(libraries.obsolete)
+
+    -- shortcut and helper
+
+    local setbytecode  = lua.setbytecode
+    local getbytecode  = lua.getbytecode
+    local callbytecode = lua.callbytecode or function(i)
+        local b = getbytecode(i)
+        if type(b) == "function" then
+            b()
+            return true
+        else
+            return false
+        end
+    end
+
+    local function init(start)
+        local i = start
+        local t = os.clock()
+        while true do
+         -- local b = callbytecode(i)
+            local e, b = pcall(callbytecode,i)
+            if not e then
+                print(string.format("fatal error : unable to load bytecode register %%i, maybe wipe the cache first\n",i))
+                os.exit()
+            end
+            if b then
+                setbytecode(i,nil) ;
+                i = i + 1
+            else
+                break
+            end
+        end
+        return i - start, os.clock() - t
+    end
+
+    -- the stored tables and modules
+
+    storage.noftables , storage.toftables  = init(0)
+    storage.nofmodules, storage.tofmodules = init(%s)
+
+    if modules then
+        local loaded = package.loaded
+        for module, _ in next, modules do
+            loaded[module] = true
+        end
+    end
+
+    texconfig.init = function() end
+
+end
+
+CONTEXTLMTXMODE = 1
+
+-- we provide a qualified path
+
+callback.register('find_format_file',function(name)
+    texconfig.formatname = name
+    return name
+end)
+
+-- done, from now on input and callbacks are internal
+]]
+
+local keys = {
+    "buffersize", "expandsize", "filesize", "fontsize", "hashsize", "inputsize",
+    "languagesize", "marksize", "insertsize", "nestsize", "nodesize", "parametersize", "poolsize",
+    "savesize", "stringsize", "tokensize", "errorlinesize", "halferrorlinesize",
+}
+
+local function makestub()
+    local name = environment.jobname .. ".lui"
+    report("creating stub file %a using directives:",name)
+    report()
+    firsttable = firsttable or lua.firstbytecode
+    local t = {
+        "-- This file is generated, don't change it!\n"
+    }
+    for i=1,#keys do
+        local target = keys[i]
+        local key = "luametatex." .. target
+        local val = directives.value(key)
+        if type(val) == "number" then
+            val = { size = val }
+        end
+        if type(val) == "table" then
+            local s = { }
+            local v = val.size if v then s[#s+1] = format("size = %10i",v) end
+            local v = val.plus if v then s[#s+1] = format("plus = %10i",v) end
+            local v = val.step if v then s[#s+1] = format("step = %10i",v) end
+            if #s > 0 then
+                s = format("%-17s = { %s }",target,concat(s,", "))
+                report("  %s",s)
+                t[#t+1] = "texconfig." .. s
+            end
+        end
+    end
+    t[#t+1] = ""
+    t[#t+1] = format(stub,firsttable)
+    io.savedata(name,concat(t,"\n"))
+    report()
+end
+
+lua.registerinitexfinalizer(makestub,"create stub file")

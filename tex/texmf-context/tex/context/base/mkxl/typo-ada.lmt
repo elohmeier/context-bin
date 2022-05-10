@@ -1,0 +1,167 @@
+if not modules then modules = { } end modules ['typo-adj'] = {
+    version   = 1.001,
+    optimize  = true,
+    comment   = "companion to typo-adj.mkxl",
+    author    = "Hans Hagen, PRAGMA-ADE, Hasselt NL",
+    copyright = "PRAGMA ADE / ConTeXt Development Team",
+    license   = "see context related readme files"
+}
+
+local setdimen        = tex.setdimen
+local setcount        = tex.setcount
+local setmacro        = tokens.setters.macro
+local expandmacro     = token.expandmacro
+
+local nuts            = nodes.nuts
+local getid           = nuts.getid
+local getlist         = nuts.getlist
+local getwhd          = nuts.getwhd
+local getattr         = nuts.getattr
+local getwidth        = nuts.getwidth
+local setlist         = nuts.setlist
+local setlink         = nuts.setlink
+local setstate        = nuts.setstate
+local setattr         = nuts.setattr
+
+local hlist_code      = nodes.nodecodes.hlist
+local vlist_code      = nodes.nodecodes.vlist
+
+local getbox          = nuts.getbox
+local takebox         = nuts.takebox
+
+local new_kern        = nuts.pool.kern
+
+local flattenleaders  = nuts.flattenleaders
+local traverselist    = nuts.traverselist
+local traverseleader  = nuts.traverseleader
+
+local a_adaptive      = attributes.private("adaptive")
+
+local registervalue   = attributes.registervalue
+local getvalue        = attributes.getvalue
+local hasvalues       = attributes.hasvalues
+local texsetattribute = tex.setattribute
+
+local adaptive        = nodes.adaptive or { }
+nodes.adaptive        = adaptive
+local enabled         = false
+
+local enableaction = nodes.tasks.enableaction
+
+function adaptive.set(settings)
+    if not enabled then
+        enableaction("vboxbuilders","nodes.adaptive.handlehorizontal")
+        enableaction("vboxhandlers","nodes.adaptive.handlevertical")
+        enabled = true
+    end
+    texsetattribute(a_adaptive,registervalue(a_adaptive,settings))
+end
+
+local function setadaptive(w,h,d,l,c)
+    setdimen("d_adaptive_width",w)
+    setdimen("d_adaptive_height",h)
+    setdimen("d_adaptive_depth",d)
+    setdimen("d_adaptive_line",l)
+    setmacro("m_adaptive_color",c)
+end
+
+local methods = {
+    -- overlay
+    [1] = function(settings,parent,list)
+        local setups = settings.setups
+        if setups and setups ~= ""  then
+            local w, h, d = getwhd(parent)
+            setadaptive(w,h,d,settings.rulethickness,settings.color)
+            expandmacro("setup",true,setups)
+            local l = takebox("b_adaptive_box")
+            if l then
+                setlist(parent, setlink(l,new_kern(-getwidth(l)),list))
+            end
+        end
+    end
+}
+
+-- The hlist leaders get done before we enter vpacking, so that is where the
+-- first call kicks in. Then we do a vpack (so one can indeed also adapt the
+-- ht/dp). After packing we know the glue and do the vlist leaders.
+
+local function handlehorizontal(n)
+    if hasvalues(a_adaptive) then
+        for _, t, _, l in traverselist(n) do
+            if t == hlist_code then
+                for m, _, _, ll in traverseleader(l) do
+                    local a = getattr(m,a_adaptive)
+                    if a then
+                        local settings = getvalue(a_adaptive,a)
+                        if settings then
+                            setstate(m,0)
+                            local action = methods[settings.method or 1]
+                            if action then
+                                action(settings,m,ll)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return n
+end
+
+local function handlevertical(n)
+    if hasvalues(a_adaptive) then
+        -- not a list just a node
+        for nn, t, _, l in traverselist(n) do
+            if t == vlist_code then
+                for m, _, _, ll in traverseleader(l) do
+                    local a = getattr(m,a_adaptive)
+                    if a then
+                        local settings = getvalue(a_adaptive,a)
+                        if settings then
+                            setstate(m,0)
+                            local action = methods[settings.method or 1]
+                            if action then
+                                action(settings,m,ll)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return n
+end
+
+adaptive.handlehorizontal = handlehorizontal
+adaptive.handlevertical   = handlevertical
+
+interfaces.implement {
+    name      = "setadaptive",
+    actions   = adaptive.set,
+    arguments = {
+        {
+            { "setups", "string" },
+            { "method", "integer" },
+            { "mp", "string" },
+            { "color", "string" },
+            { "rulethickness", "dimension" },
+        }
+    }
+}
+
+interfaces.implement {
+    name      = "adaptivecheckbox",
+    arguments = "integer",
+    public    = true,
+    protected = true,
+    actions   = function(n)
+        local b = getbox(n)
+        if b and flattenleaders(b) > 0 then
+            if getid(b) == hlist_code then
+                handlehorizontal(b)
+            else
+                handlevertical(b)
+            end
+        end
+    end,
+}

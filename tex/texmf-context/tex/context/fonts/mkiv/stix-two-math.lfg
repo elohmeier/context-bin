@@ -1,0 +1,113 @@
+return {
+    name = "stix-two-math",
+    version = "1.00",
+    comment = "Goodies that complement stix two opentype.",
+    author = "Hans Hagen & Mikael Sundqvist",
+    copyright = "ConTeXt development team",
+    mathematics = {
+        alternates = {
+            calligraphic = { feature = 'ss01', value = 1, comment = "Mathematical Alternative Calligraphic Characters" },
+            italic       = { feature = 'ss02', value = 1, comment = "Mathematical Alternative Lowercase Italic" },
+            barred       = { feature = 'ss03', value = 1, comment = "Mathematical Alternative Barred Characters" }, -- hbar, lambdabar etc
+            primes       = { feature = 'ss04', value = 1, comment = "Mathematical Alternative Primes" },            -- larger/lower primes, minute etc
+            arrow        = { feature = 'ss05', value = 1, comment = "Mathematical Alternative Smaller Arrows" },
+            narrower     = { feature = 'ss06', value = 1, comment = "Mathematical Alternative Narrower Elements" }, -- narrower/shorter element etc
+            small        = { feature = 'ss07', value = 1, comment = "Mathematical Alternative Smaller Operators" },
+            upright      = { feature = 'ss08', value = 1, comment = "Mathematical Alternative Upright Symbols" },   -- upright integrals etc.
+            negated      = { feature = 'ss09', value = 1, comment = "Mathematical Alternative Negated Symbols" },
+            relation     = { feature = 'ss10', value = 1, comment = "Mathematical Alternative Relations" },
+            negatedset   = { feature = 'ss09', value = 1, comment = "Mathematical Alternative Negated Set Symbols" },
+         -- todo         = { feature = 'ss14', value = 1, comment = "" },
+            circled      = { feature = 'ss16', value = 1, comment = "Mathematical Alternative Circled Operators" },
+        },
+        parameters = {
+            NoLimitSupFactor =    0,
+            NoLimitSubFactor = 1000,
+            -- AccentBaseHeight = 0,
+            AccentBaseDepth  = 30,
+        },
+        tweaks = {
+            aftercopying = {
+                {
+                    tweak    = "version",
+                    expected = "Version 2.12 b168",
+                },
+                {
+                    tweak = "kerns",
+                    list  = {
+                        [0x2F] = {
+                            topleft     = -0.2,
+                         -- bottomleft  =  0,
+                         -- topright    =  0,
+                            bottomright =  -0.2,
+                       },
+                    },
+                },
+                -- 0xFEOO should be chancery style, if present
+                {
+                    tweak    = "variants",
+                    kind     = "script",
+                 -- feature  = false, -- use the saved ones (see typescript)
+                    selector = 0xFE00,
+                },
+                -- 0xFEO1 should be roundhand style, if present
+                {
+                    tweak    = "variants",
+                    kind     = "script",
+                    feature  = "ss01",-- this changes to roundhand style for stixtwo
+                    selector = 0xFE01,
+                },
+                {
+                    tweak = "dimensions",
+                    list  = {
+                     -- [0x00060] = { yoffset = -0.035 }, -- grave
+                     -- [0x000B4] = { yoffset = -0.035 }, -- acute
+                     -- [0x002C6] = { yoffset = -0.035 }, -- hat
+                     -- [0x002DC] = { yoffset = -0.035 }, -- tilde
+                     -- [0x000AF] = { yoffset = -0.05 }, -- bar
+                     -- [0x002D8] = { yoffset = -0.035 }, -- breve
+                        [0x002D9] = { yoffset = -0.02 }, -- dot
+                        [0x000A8] = { yoffset = -0.02 }, -- ddot
+                        [0x020DB] = { yoffset =  0.04 }, -- dddot
+                     -- [0x002DA] = { yoffset = -0.05 }, -- ring
+                     -- [0x002C7] = { yoffset = -0.05 }, -- check
+                        [0x020D7] = { yoffset = -0.07 }, -- vec
+                     -- [0x00300] = { yoffset = -0.07 , all=true }, -- widegrave
+                     -- [0x00301] = { yoffset = -0.07 , all=true }, -- wideacute
+                     -- [0x00302] = { yoffset = -0.02 , all=true }, -- widehat
+                     -- [0x00303] = { yoffset = -0.02 , all=true }, -- widetilde
+                     -- [0x00304] = { yoffset = -0.05 , all=true }, -- widebar
+                     -- [0x00306] = { yoffset = -0.03 , all=true }, -- widebreve
+                     -- [0x00307] = { yoffset = -0.03 , all=true }, -- widedot
+                     -- [0x00308] = { yoffset = -0.03 , all=true }, -- wideddot
+                     -- [0x020DB] = { yoffset =  0.0 , all=true }, -- widedddot
+                     -- [0x0030A] = { yoffset = -0.05 , all=true }, -- widering
+                    },
+                },
+                {
+                    tweak   = "fixprimes",
+                    scale   = 1,
+                 -- smaller = true,
+                    factor  = 1,
+                },
+                {
+                    tweak = "checkspacing",
+                },
+                {
+                    tweak = "addscripts",
+                },
+                {
+                    tweak = "accentdimensions",
+                },
+                {
+                    tweak = "addrules",
+                },
+            },
+        },
+        bigslots = {
+            1, 3, 5, 7
+        },
+    },
+}
+
+

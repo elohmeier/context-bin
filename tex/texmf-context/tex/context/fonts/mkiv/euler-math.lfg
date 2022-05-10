@@ -1,0 +1,29 @@
+-- this file might go away and is for experiments only
+
+return {
+    name = "euler-math",
+    version = "1.00",
+    comment = "Goodies that complement euler math.",
+    author = "Hans Hagen",
+    copyright = "ConTeXt development team",
+    mathematics = {
+        tweaks = {
+            aftercopying = {
+                {
+                    tweak   = "fixprimes",
+                    factor  = 0.9,
+                    smaller = true,
+                    scale   = 0.60,
+                    fake    = 0.75,
+                },
+            },
+        },
+        bigslots = {
+            1, 3, 5, 7
+        },
+    },
+
+
+}
+
+

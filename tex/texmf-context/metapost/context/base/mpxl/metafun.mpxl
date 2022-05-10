@@ -1,0 +1,63 @@
+%D \module
+%D   [       file=metafun.mp,
+%D        version=2000.07.15,
+%D          title=\CONTEXT\ \METAPOST\ graphics,
+%D       subtitle=format generation file,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA / Hans Hagen \& Ton Otten}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+%D First we input John Hobby's metapost plain file. However, because we want to
+%D prevent dependency problems and in the end even may use a patched version,
+%D we prefer to use a copy.
+
+% We only get a callback when the property > 0
+
+def primitive = setproperty  1 : enddef; % not to be used
+def permanent = setproperty  2 : enddef;
+def immutable = setproperty  3 : enddef;
+def frozen    = setproperty  4 : enddef; % not yet used
+def mutable   = setproperty -3 : enddef; % not yet used
+
+permanent permanent, immutable, mutable, primitive, frozen ; % we reserve frozen
+
+newinternal boolean contextlmtxmode ; contextlmtxmode := true ; immutable contextlmtxmode ;
+
+% But it will move here:
+
+input "mp-base.mpxl" ;
+input "mp-tool.mpxl" ;
+input "mp-luas.mpxl" ;
+input "mp-mlib.mpxl" ;
+input "mp-math.mpxl" ;
+input "mp-cont.mpxl" ;
+input "mp-page.mpxl" ;
+input "mp-butt.mpxl" ;
+input "mp-shap.mpxl" ;
+input "mp-grph.mpxl" ;
+input "mp-grid.mpxl" ;
+input "mp-form.mpxl" ;
+input "mp-figs.mpxl" ;
+input "mp-func.mpxl" ;
+input "mp-node.mpxl" ;
+input "mp-apos.mpxl" ;
+input "mp-abck.mpxl" ;
+input "mp-asnc.mpxl" ;
+input "mp-blob.mpxl" ;
+input "mp-lmtx.mpxl" ;
+input "mp-text.mpxl" ;
+
+newinternal string metafunversion ; metafunversion := "metafun xl " & mfun_timestamp;
+
+immutable metafunversion ;
+
+let normalend = end ;
+
+def end = ; message "" ; message metafunversion ; message "" ; endinput  ; enddef ;
+def bye = ; message "" ; message metafunversion ; message "" ; endinput  ; enddef ;
+
+overloadmode := 1 ;

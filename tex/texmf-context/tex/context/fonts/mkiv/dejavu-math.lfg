@@ -1,0 +1,86 @@
+local dimensions, kerns  if CONTEXTLMTXMODE == 0 then
+
+    local kern_V = { bottomright = { { kern = -250 } } }
+    local kern_W = kern_W
+
+    kerns = {
+        [0x1D449] = kern_V, -- 𝑉
+        [0x1D44A] = kern_W, -- 𝑊
+    }
+
+end
+
+return {
+    name = "dejavu-math",
+    version = "1.00",
+    comment = "Goodies that complement dejavu.",
+    author = "Hans Hagen & Mikael Sundqvist",
+    copyright = "ConTeXt development team",
+    mathematics = {
+        parameters = {
+            NoLimitSupFactor      =   0,
+            NoLimitSubFactor      = 900,
+            FractionRuleThickness =  60,
+            AccentBaseDepth          =  30,
+        },
+        tweaks = {
+            aftercopying = {
+                {
+                    tweak    = "version",
+                    expected = "Version 1.106",
+                },
+                {
+                    tweak = "dimensions",
+                    list  = {
+                     -- [0x1D449]           = { 0, .8, .2 },
+                     -- [0x1D44A]           = { 0, .8, .2 },
+                        ["0x1D449:0x1D44A"] = { 0, .8, .2 },
+                    }
+                },
+                {
+                    tweak = "kerns",
+                    list  = {
+                        [0x2F] = {
+                            topleft     = -0.2,
+                         -- bottomleft  =  0,
+                         -- topright    =  0,
+                            bottomright =  -0.2,
+                       },
+                    },
+                },
+                {
+                    tweak   = "fixprimes",
+                    -- scale   = 0.9,
+                    -- smaller = true,
+                    factor  = 0.8,
+                },
+                {
+                    tweak = "checkspacing",
+                },
+                {
+                    tweak = "addscripts",
+                },
+                {
+                    tweak = "accentdimensions",
+                },
+                {
+                    tweak = "addrules",
+                },
+                {
+                    tweak = "wipecues",
+                },
+            },
+        },
+        alternates = {
+            dotless = { feature = 'dtls', value = 1, comment = "Mathematical Dotless Forms" },
+        },
+        bigslots = {
+            1, 3, 5, 7
+        },
+        --
+        -- experimental fixes for mkiv:
+        --
+        dimensions = dimensions,
+        kerns = kerns,
+    },
+}

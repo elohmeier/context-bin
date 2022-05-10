@@ -1,0 +1,108 @@
+%D \module
+%D   [       file=meta-imp-magick,
+%D        version=2021.08.03,
+%D          title=\METAPOST\ Graphics,
+%D       subtitle=Magick Manipulations,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\registerctxluafile{libs-imp-graphicsmagick}{autosuffix}
+\registerctxluafile{libs-imp-imagemagick}{autosuffix}
+
+\startluacode
+    local converters = {
+        im          = "imagemagick",
+        imagemagick = "imagemagick",
+        magick      = "imagemagick",
+    }
+
+    local frozen    = false
+    local convert = false
+
+    -- for some reason we cannot load both libraries
+
+    function mp.lmt_magick_convert()
+        local specification = metapost.getparameterset("magick")
+        local inputname     = specification.filename
+        if inputname then
+            -- we don't want to trigger reuse when we have the same input file
+            local hash = md5.HEX(table.sequenced(specification))
+            local outputname = file.addsuffix("m_k_i_v_mp_fuzzy_" .. hash,file.suffix(inputname))
+            -- make the table a bit unique and don't polute it
+            local whattodo = table.setmetatableindex( {
+                inputname  = inputname,
+                outputname = outputname,
+            }, specification)
+            luatex.registertempfile(outputname)
+            -- now do the magick
+            if not convert then
+                convert = utilities[converters[specification.converter or "gm"] or "graphicsmagick"].convert
+            end
+            convert(whattodo)
+            -- and return the result
+            return [[figure("]] .. outputname .. [[")]]
+        else
+            -- bad luck
+            return [[textext("missing filename")]]
+        end
+    end
+\stopluacode
+
+\startMPdefinitions
+
+    presetparameters "magick" [
+        filename = "unset",
+      % blur     = [ radius = 10, sigma = 5 ],
+      % noise    = [ type = 4 ],
+    ] ;
+
+    def lmt_magick = applyparameters "magick" "lmt_do_magick" enddef ;
+
+    vardef lmt_do_magick = lua.mp.lmt_magick_convert() enddef ;
+
+\stopMPdefinitions
+
+\continueifinputfile{meta-imp-magick.mkxl}
+
+\enabletrackers[*lib*]
+
+\startMPpage
+    presetparameters "magick" [
+        converter = "magick", % comment / uncomment
+    ] ;
+    draw lmt_magick [
+        filename  = "hacker.jpg",
+        % for im
+        options   = { "-rotate", 180 },
+    ] ysized 4cm ;
+
+    draw lmt_magick [
+        filename = "hacker.jpg",
+        % for gm
+        blur     = [ radius = 10, sigma = 5 ],
+        noise    = [ type = 2 ],
+        % for gm
+        options  = { "-noise", 2 },
+    ] ysized 4cm shifted (8cm, -4cm) ;
+
+    draw lmt_magick [
+        filename = "hacker.jpg",
+        % for gm
+        blur     = [ radius = 5, sigma = 3 ],
+        noise    = [ type = 4 ],
+        % for gm
+        options  = { "-noise", 4 },
+    ] ysized 4cm shifted (0, -4cm) ;
+
+    draw lmt_magick [
+        filename = "hacker.jpg",
+        blur     = [ radius = 10, sigma = 5 ],
+        % for gm
+        noise    = [ type = 4 ],
+    ] ysized 4cm shifted (8cm, 0cm) ;
+\stopMPpage

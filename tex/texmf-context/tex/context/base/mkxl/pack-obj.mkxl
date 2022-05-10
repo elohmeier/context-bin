@@ -1,0 +1,166 @@
+%D \module
+%D   [       file=pack-obj,
+%D        version=1998.01.15,
+%D          title=\CONTEXT\ Packaging Macros,
+%D       subtitle=Objects,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Packaging Macros / Objects}
+
+\unprotect
+
+\registerctxluafile{pack-obj}{autosuffix}
+
+%D \macros
+%D   {setobject,getobject,ifinobject}
+%D
+%D Boxes can be considered reuable objects. Traditionally once passed to the \DVI\
+%D file, such objects cannot be reused. In \PDF\ however, reusing is possible and
+%D sometimes even a necessity. Therefore, \CONTEXT\ supports reusable objects and
+%D \LUATEX\ has native support for so called box resources.
+%D
+%D The first application of objects in \CONTEXT\ concerned \METAPOST\ graphics and
+%D fill||in form fields. Reusing resources can save lots of bytes and sometimes also
+%D runtime.
+%D
+%D \starttyping
+%D \setobject{class}{name}\somebox{}
+%D \getobject{class}{name}
+%D \stoptyping
+%D
+%D Here \type {\somebox} can be whatever box specification suits \TEX. Although the
+%D implementation in \MKIV\ is somewhat different the principles have not changed.
+
+\installcorenamespace {objects}
+
+\newif   \ifinobject
+\newbox  \b_pack_objects
+
+\mutable\def\objectoffset{1cm} % Still public but use with care!
+
+\newdimen\d_pack_objects_offset \permanent\def\objectmargin{\the\d_pack_objects_offset}
+\newdimen\d_pack_objects_width  \permanent\def\objectwidth {\the\d_pack_objects_width}
+\newdimen\d_pack_objects_height \permanent\def\objectheight{\the\d_pack_objects_height}
+\newdimen\d_pack_objects_depth  \permanent\def\objectdepth {\the\d_pack_objects_depth}
+
+%D If I have time I will use the unreferenced variant for e.g. mp reuse. This can be
+%D rewritten in \LUA\ anyway.
+
+\permanent\protected\def\setreferencedobject       #1#2{\begingroup\synctexpause\d_pack_objects_offset\objectoffset\inobjecttrue\dowithnextbox{\pack_objects_set_yes{#1}{#2}}}
+\permanent\protected\def\settightreferencedobject  #1#2{\begingroup\synctexpause\d_pack_objects_offset\zeropoint   \inobjecttrue\dowithnextbox{\pack_objects_set_yes{#1}{#2}}}
+\permanent\protected\def\setunreferencedobject     #1#2{\begingroup\synctexpause\d_pack_objects_offset\objectoffset\inobjecttrue\dowithnextbox{\pack_objects_set_nop{#1}{#2}}}
+\permanent\protected\def\settightunreferencedobject#1#2{\begingroup\synctexpause\d_pack_objects_offset\zeropoint   \inobjecttrue\dowithnextbox{\pack_objects_set_nop{#1}{#2}}}
+
+\aliased\let\setobject     \setreferencedobject
+\aliased\let\settightobject\settightreferencedobject
+
+%D We can get subtle differences in boundingboxes but both methods work ok.
+
+\newconstant\c_pack_objects_offset_mode % 0=tex 1=box
+
+\protected\def\pack_objects_set_yes#1#2%
+  {\ifcase\c_pack_objects_offset_mode
+     \ifzeropt\d_pack_objects_offset
+       \pack_objects_package_nop\nextbox
+     \else
+       \pack_objects_package_yes\nextbox
+     \fi
+   \else
+     \pack_objects_package_nop\nextbox
+   \fi
+   \clf_registerreferencedobject{#1}{#2}\b_pack_objects\d_pack_objects_offset\c_pack_objects_offset_mode
+   \synctexresume
+   \endgroup}
+
+\protected\def\pack_objects_set_nop#1#2%
+  {\ifcase\c_pack_objects_offset_mode
+     \ifzeropt\d_pack_objects_offset
+       \pack_objects_package_nop\nextbox
+     \else
+       \pack_objects_package_yes\nextbox
+     \fi
+   \else
+     \pack_objects_package_nop\nextbox
+   \fi
+   \clf_registerobject{#1}{#2}\b_pack_objects\d_pack_objects_offset\c_pack_objects_offset_mode
+   \synctexresume
+   \endgroup}
+
+\def\pack_objects_package_nop#1% we pack because otherwise \ruledhbox is still tight
+  {\setbox\b_pack_objects\hpack{\box#1}}
+
+\def\pack_objects_package_yes#1%
+  {\d_pack_objects_width \dimexpr\wd#1+2\d_pack_objects_offset\relax
+   \d_pack_objects_height\dimexpr\ht#1+ \d_pack_objects_offset\relax
+   \d_pack_objects_depth \dimexpr\dp#1+ \d_pack_objects_offset\relax
+   \setbox\b_pack_objects\hpack{\hskip\d_pack_objects_offset\box#1}%
+   \wd\b_pack_objects\d_pack_objects_width
+   \ht\b_pack_objects\d_pack_objects_height
+   \dp\b_pack_objects\d_pack_objects_depth}
+
+\permanent\protected\def\getobject#1#2%
+  {\begingroup
+   \synctexpause
+   \clf_restoreobject{#1}{#2}%
+   \ifzeropt\d_pack_objects_offset\else
+     \d_pack_objects_offset-\d_pack_objects_offset
+     \pack_objects_package_yes\b_pack_objects
+   \fi
+   \box\b_pack_objects
+   \synctexresume
+   \endgroup}
+
+%D If needed one can ask for the dimensions of an object with:
+%D
+%D \starttyping
+%D \getobjectdimensions{class}{name}
+%D \stoptyping
+%D
+%D The results are reported in \type {\objectwidth}, \type {\objectheight} and \type
+%D {\objectdepth} as well as \type {\objectoffset}.
+
+% \getobjectdimensions #1#2 % defined at the lua end
+
+%D \macros
+%D   {doifobjectfoundelse,doifobjectreferencefoundelse}
+%D
+%D To prevent redundant definition of objects, one can use the next tests:
+%D
+%D \starttyping
+%D \doifobjectfoundelse{class}{object}{do then}{do else}
+%D \doifobjectreferencefoundelse{class}{object}{do then}{do else}
+%D \stoptyping
+
+\immutable\def\defaultobjectreference{0}
+\immutable\def\defaultobjectpage     {\realfolio}
+
+% \getobjectreference           {#1}{#2\csname % define at the lua end
+% \getobjectreferencepage       {#1}{#2\csname % define at the lua end
+% \doifelseobjectfound          {#1}{#2}       % defined atthe lua end
+% \doifelseobjectreferencefound {#1}{#2}       % defined atthe lua end
+
+\aliased\let\dogetobjectreference    \getobjectreference     % for now, will go away
+\aliased\let\dogetobjectreferencepage\getobjectreferencepage % for now, will go away
+
+\aliased\let\doifobjectfoundelse         \doifelseobjectfound
+\aliased\let\doifobjectreferencefoundelse\doifelseobjectreferencefound
+
+%D For the moment here:
+
+\mutable\let\lastpredefinedsymbol\empty % some day we can do more at the lua end
+
+\permanent\protected\def\predefinesymbol[#1]%
+  {\begingroup
+   \xdef\lastpredefinedsymbol{#1}%
+   \settightobject{SYM}{#1}\hbox{\symbol[#1]}% to be checked ... maybe only fitting
+   \getobjectreference{SYM}{#1}\m_back_object_reference
+   \clf_registerbackendsymbol{#1}\m_back_object_reference\relax
+   \endgroup}
+
+\protect \endinput

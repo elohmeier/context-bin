@@ -1,0 +1,171 @@
+    %D \module
+%D   [       file=math-tex,
+%D        version=2001.04.12,
+%D          title=\CONTEXT\ Math Macros,
+%D       subtitle=Definitions,
+%D         author={Hans Hagen, Taco Hoekwater \& Aditya Mahajan},
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Math Macros / Definitions}
+
+\unprotect
+
+\pushoverloadmode % cap etc
+
+\startluacode
+    mathematics.define()
+ -- mathematics.xml.registerentities()
+\stopluacode
+
+\popoverloadmode
+
+\activatemathcharacters
+
+%D The \mfunction macro is an alternative for \hbox with a controlable font switch.
+
+\definemathfunction [arccos]
+\definemathfunction [arcsin]
+\definemathfunction [arctan]
+\definemathfunction [arccosh]
+\definemathfunction [arcsinh]
+\definemathfunction [arctanh]
+\definemathfunction [acos]
+\definemathfunction [asin]
+\definemathfunction [atan]
+\definemathfunction [arg]
+\definemathfunction [cosh]
+\definemathfunction [cos]
+\definemathfunction [coth]
+\definemathfunction [cot]
+\definemathfunction [csc]
+\definemathfunction [deg]
+\definemathfunction [det]     [\c!mathlimits=\v!yes]
+\definemathfunction [dim]
+\definemathfunction [exp]
+\definemathfunction [gcd]     [\c!mathlimits=\v!yes]
+\definemathfunction [hom]
+\definemathfunction [inf]     [\c!mathlimits=\v!yes]
+\definemathfunction [inv]     [\c!mathlimits=\v!yes]
+\definemathfunction [injlim]  [\c!mathlimits=\v!yes]
+\definemathfunction [ker]
+\definemathfunction [lg]
+\definemathfunction [liminf]  [\c!mathlimits=\v!yes]
+\definemathfunction [limsup]  [\c!mathlimits=\v!yes]
+\definemathfunction [lim]     [\c!mathlimits=\v!yes]
+\definemathfunction [ln]
+\definemathfunction [log]
+\definemathfunction [median]  [\c!mathlimits=\v!yes]
+\definemathfunction [max]     [\c!mathlimits=\v!yes]
+\definemathfunction [min]     [\c!mathlimits=\v!yes]
+\definemathfunction [mod]     [\c!mathlimits=\v!yes]
+%definemathfunction [div]     [\c!mathlimits=\v!yes]
+\definemathfunction [projlim] [\c!mathlimits=\v!yes]
+\definemathfunction [Pr]      [\c!mathlimits=\v!yes]
+\definemathfunction [sec]
+\definemathfunction [sinh]
+\definemathfunction [sin]
+\definemathfunction [sup]     [\c!mathlimits=\v!yes]
+\definemathfunction [tanh]
+\definemathfunction [tan]
+\definemathfunction [diff]
+
+\aliased\let\normalmatharg\arg % todo: maybe automatically
+
+%D This needs checking:
+
+\permanent\protected\def\setoperatorlimits#1#2% operator limits
+  {\savenormalmeaning{#1}%
+   %frozen\protected\expandafter\def\expandafter#1\expandafter{\csname normal\csstring#1\endcsname#2}}
+   \frozen\protected\edef#1{\expandafter\noexpand\csname\s!normal\csstring#1\endcsname\noexpand#2}}
+
+\pushoverloadmode
+
+\setoperatorlimits \int              \intlimits
+\setoperatorlimits \iint             \intlimits
+\setoperatorlimits \iiint            \intlimits
+\setoperatorlimits \oint             \intlimits
+\setoperatorlimits \oiint            \intlimits
+\setoperatorlimits \oiiint           \intlimits
+\setoperatorlimits \intclockwise     \intlimits
+\setoperatorlimits \ointclockwise    \intlimits
+\setoperatorlimits \ointctrclockwise \intlimits
+
+\popoverloadmode
+
+%D \macros
+%D   {centercolon, colonminus, minuscolon, colonequals, equalscolon,
+%D    colonapprox, approxcolon, colonsim, simcolon, coloncolon,
+%D    coloncolonminus, minuscoloncolon, coloncolonequals,
+%D    equalscoloncolon, coloncolonapprox, approxcoloncolon,
+%D    colonsim, simcoloncolon}
+%D
+%D The following colon related definitions are provided by Aditya Mahajan who
+%D derived them from \type {mathtools.sty} and \type {colonequals.sty}. This will be
+%D redone as part of the overhaul and font updates.
+%D
+%D In $a := b$ the colon is not vertically centered with the equal to. Also the
+%D distance between colon and equal to is a bit large. So, we define a vertically
+%D centered colon \tex {centercolon} and a few macros for colon and double colon
+%D relation symbols.
+%D
+%D \startlines
+%D \formula {A \centercolon       B}
+%D \formula {A \colonminus        B}
+%D \formula {A \minuscolon        B}
+%D \formula {A \colonequals       B}
+%D \formula {A \equalscolon       B}
+%D \formula {A \colonapprox       B}
+%D \formula {A \approxcolon       B}
+%D \formula {A \colonsim          B}
+%D \formula {A \simcolon          B}
+%D \formula {A \coloncolon        B}
+%D \formula {A \coloncolonminus   B}
+%D \formula {A \minuscoloncolon   B}
+%D \formula {A \coloncolonequals  B}
+%D \formula {A \equalscoloncolon  B}
+%D \formula {A \coloncolonapprox  B}
+%D \formula {A \approxcoloncolon  B}
+%D \formula {A \colonsim          B}
+%D \formula {A \simcoloncolon     B}
+%D \stoplines
+%D
+%D The next macros take care of the space between the colon and the
+%D relation symbol.
+
+\pushoverloadmode
+
+\definemathcommand [colonsep]                       {\mkern-1.2mu}
+\definemathcommand [doublecolonsep]                 {\mkern-0.9mu}
+
+\definemathcommand [centercolon]      [\s!relation] {\mathstylevcenteredhbox\colon}
+\definemathcommand [colonminus]       [\s!relation] {\centercolon\colonsep\mathrel{-}}
+%definemathcommand [minuscolon]       [\s!relation] {\mathrel{-}\colonsep\centercolon} % native char
+%definemathcommand [colonequals]      [\s!relation] {\centercolon\colonsep=}           % native char
+%definemathcommand [equalscolon]      [\s!relation] {=\centercolon\colonsep}           % native char
+\definemathcommand [colonapprox]      [\s!relation] {\centercolon\colonsep\approx}
+\definemathcommand [approxcolon]      [\s!relation] {\approx\centercolon\colonsep}
+\definemathcommand [colonsim]         [\s!relation] {\centercolon\colonsep\sim}
+\definemathcommand [simcolon]         [\s!relation] {\sim\centercolon\colonsep}
+
+\definemathcommand [coloncolon]       [\s!relation] {\centercolon\doublecolonsep\centercolon}
+\definemathcommand [coloncolonminus]  [\s!relation] {\coloncolon\colonsep\mathrel{-}}
+\definemathcommand [minuscoloncolon]  [\s!relation] {\mathrel{-}\colonsep\coloncolon}
+\definemathcommand [coloncolonequals] [\s!relation] {\coloncolon\colonsep=}            % native char
+\definemathcommand [equalscoloncolon] [\s!relation] {=\coloncolon\colonsep}
+\definemathcommand [coloncolonapprox] [\s!relation] {\coloncolon\colonsep\approx}
+\definemathcommand [approxcoloncolon] [\s!relation] {\approx\coloncolon\colonsep}
+\definemathcommand [coloncolonsim]    [\s!relation] {\coloncolon\colonsep\sim}
+\definemathcommand [simcoloncolon]    [\s!relation] {\sim\coloncolon\colonsep}
+
+\popoverloadmode
+
+% \appendtoks
+%     \def\over{\primitive\over}%
+% \to \everymathematics
+
+\protect \endinput

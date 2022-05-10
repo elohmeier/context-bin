@@ -1,0 +1,92 @@
+%D \module
+%D   [       file=m-json,
+%D        version=2022.04.11, % 2012.08.03,
+%D          title=\CONTEXT\ Modules,
+%D       subtitle=Json,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\startmodule [json]
+
+\registerctxluafile{util-jsn}{}
+\registerctxluafile{util-tbs}{}
+
+% \def\u#1#2#3#4{\cldcontext{utf.char(0x#1#2#3#4)}}
+
+\startluacode
+
+    local tablestore = utilities.tablestore
+    local field      = tablestore.field
+
+    interfaces.implement {
+        name      = "loadtable",
+        actions   = tablestore.load,
+        arguments = { "optional", "optional" },
+        public    = true,
+        protected = true,
+    }
+
+    interfaces.implement {
+        name      = "tablefield",
+        actions   = function(namespace,name)
+            local data = field(namespace,name)
+            if data then
+                context(data)
+            end
+        end,
+        arguments = "2 arguments",
+        public    = true,
+protected = true,
+    }
+
+    interfaces.implement {
+        name      = "tablefielddefault",
+        actions   = function(namespace,name,default)
+            local data = field(namespace,name,default)
+            if data then
+                context(data)
+            end
+        end,
+        arguments = "3 arguments",
+        public    = true,
+    }
+
+    local replace   = lpeg.replacer("@","%%")
+    local lpegmatch = lpeg.match
+
+    interfaces.implement {
+        name      = "tableformatted",
+        actions   = function(namespace,name,fmt)
+            local data = field(namespace,name)
+            if data then
+                context(lpegmatch(replace,fmt),data)
+            end
+        end,
+        arguments = "3 arguments",
+        public    = true,
+    }
+
+    interfaces.implement {
+        name      = "tablelength",
+        actions   = { tablestore.length, context },
+        arguments = "2 arguments",
+        public    = true,
+    }
+
+    utilities.json.field  = tablestore.field
+    utilities.json.loaded = tablestore.loaded
+    utilities.json.length = tablestore.length
+
+\stopluacode
+
+\let\loadjsonfile     \loadtable
+\let\jsonfield        \tablefield
+\let\jsonfielddefault \tablefielddefault
+\let\jsonlength       \tablelength
+
+\stopmodule

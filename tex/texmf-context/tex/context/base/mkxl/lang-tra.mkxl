@@ -1,0 +1,137 @@
+%D \module
+%D   [       file=lang-tra,
+%D        version=2020.10.31,
+%D          title=\CONTEXT\ Language Macros,
+%D       subtitle=Transliteration,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Language Macros / Transliteration}
+
+\registerctxluafile{lang-tra}{autosuffix}
+
+\unprotect
+
+\installcorenamespace {transliteration}
+
+\installcommandhandler \??transliteration {transliteration} \??transliteration
+
+\definesystemattribute[transliteration][public,global]
+
+\newtoks\everytransliterations
+
+\appendtoks
+    \disablediscretionaries
+    \let~=\lettertilde
+  % \let|=\letterbar
+\to \everytransliterations
+
+\def\lang_transliteration_common
+  {\usetransliterationstyleandcolor\c!style\c!color
+   \uselanguageparameter\transliterationparameter
+   \clf_settransliteration{\currenttransliteration}{\transliterationparameter\c!vector}%
+   \the\everytransliterations}
+
+\permanent\tolerant\protected\def\settransliteration[#1]#;#2%
+  {\edef\currenttransliteration{#1#2}%
+   \lang_transliteration_common}
+
+\permanent\protected\def\transliterationexception[#1]#2#3%
+  {\clf_transliterationexception{#1}{#2}{#3}}
+
+\permanent\tolerant\protected\def\starttransliteration[#1]#*[#2]%
+  {\begingroup
+   \edef\currenttransliteration{#1}%
+   \ifparameter#2\or
+      \setupcurrenttransliteration[#2]%
+   \fi
+   \transliterationparameter\c!before\relax
+   \lang_transliteration_common}
+
+\permanent\protected\def\stoptransliteration
+  {\transliterationparameter\c!after\relax
+   \endgroup}
+
+\permanent\tolerant\protected\def\transliteration[#1]#;#2%
+  {\groupedcommand
+     {\edef\currenttransliteration{#1#2}%
+      \lang_transliteration_common
+      \transliterationparameter\c!left\relax}
+     {\transliterationparameter\c!right\relax}}
+
+\appendtoks
+    \clf_registertransliteration{\currenttransliterationparent}{\currenttransliteration}%
+    \ifcstok{\transliterationparameter\c!define}\v!yes
+      \frozen\protected\instance\edefcsname\e!start\currenttransliteration\endcsname{\starttransliteration[\currenttransliteration]}%
+      \frozen\protected\instance\edefcsname\e!stop \currenttransliteration\endcsname{\stoptransliteration}%
+      \frozen\protected\instance\edefcsname        \currenttransliteration\endcsname{\transliteration[\currenttransliteration]}%
+    \fi
+\to \everydefinetransliteration
+
+\permanent\protected\def\resettransliteration
+  {\c_attr_transliteration\attributeunsetvalue}
+
+\setuptransliteration
+  [\c!define=\v!yes]
+
+\appendtoks
+    \resettransliteration
+\to \everyinitializeverbatim
+
+\protect \endinput
+
+% \setupbodyfont[dejavu]
+%
+% \input lang-tra.mkiv
+%
+% \definetransliteration[serbian][serbian to latin]
+%
+% \starttext
+%
+% \settransliteration[serbian to latin]
+%
+% \startchapter[title={АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ}]
+%     АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ
+%     \start
+%         \settransliteration[serbian to latin]
+%         АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ
+%     \stop
+%     АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ
+% \stopchapter
+%
+% \resettransliteration
+%
+% \startchapter[title={АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ}]
+%     АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ
+%     \start
+%         \settransliteration[serbian to latin]
+%         АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ
+%     \stop
+%     АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ
+% \stopchapter
+%
+% \definehead[ChapterA][chapter]
+% \definehead[ChapterB][chapter]
+%
+% \startsetups s-to-l
+%     \settransliteration[serbian to latin]
+%     \red
+% \stopsetups
+%
+% % maybe we need a setups key for this
+% % hm, \definesetups [xxx] [aa,bb,cc]
+%
+% \setuphead[ChapterB][commandbefore=\setups{s-to-l}]
+%
+% \startChapterA[title={АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ}]
+% \stopChapterA
+%
+% \startChapterB[title={АБВ ГДЕ ЖЗИЙ КЛМНОП РСТУ ФХЦЧ ШЩЪЬ ЮЯ}]
+% \stopChapterB
+%
+% \stoptext

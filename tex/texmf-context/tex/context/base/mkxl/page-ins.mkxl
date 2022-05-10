@@ -1,0 +1,226 @@
+%D \module
+%D   [       file=page-ins,
+%D        version=2002.04.16, % was core-ins
+%D          title=\CONTEXT\ Insertion Macros,
+%D       subtitle=Insertions,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+\writestatus{loading}{ConTeXt Core Macros / Insertions}
+
+%D Insertions are special data collections that are associated to \TEX's internal
+%D page builder. When multiple footnote classes were introduced, I decided to
+%D isolate some of the functionality in a module.
+
+\registerctxluafile{page-ins}{}
+
+\unprotect
+
+%D Because we need to deal with inserts at the \LUA\ end as well, we provide a
+%D proper installer.
+
+\installcorenamespace{insertion}
+\installcorenamespace{insertionnumber}
+
+\installcommandhandler \??insertion {insertion} \??insertion
+
+\setupinsertion
+  [%c!n=\plusone,
+   %c!distance=\zeropoint,
+   %c!maxheight=\maxdimen,
+   %c!factor=\plusthousand,
+   \c!location=\v!page]
+
+\newconstant\insertionmigrationmode
+
+\def\page_inserts_check_anchoring
+  {\edef\p_anchoring{\namedinsertionparameter\empty\c!anchoring}%
+   \insertionmigrationmode\ifx\p_anchoring\v!auto\plusone\else\zerocount\fi
+   \clf_setinsertmigration{\p_anchoring}}
+
+\appendtoks
+    \ifempty\currentinsertionparent
+        \page_inserts_check_anchoring
+    \fi
+\to \everysetupinsertion
+
+\setupinsertion
+  [\c!anchoring=\v!auto]
+
+\appendtoks
+    \page_inserts_check_anchoring
+\to \everystarttext % or \everyjob
+
+\newcount\currentinsertionnumber % This is a count and not a macro !
+
+\newtoks\t_page_inserts_list
+
+\mutable\let\doprocessinsert\gobbleoneargument % probably kind of obsolete now
+
+%D Maybe some day we will move settings here.
+
+\permanent\protected\def\setcurrentinsertion#1%
+  {\edef\currentinsertion{#1}%
+   \currentinsertionnumber\csname\??insertionnumber\currentinsertion\endcsname}
+
+\permanent\def\namedinsertionnumber#1{\csname\??insertionnumber#1\endcsname}
+
+\protected\def\page_inserts_synchronize_registers
+  {\currentinsertionnumber\csname\??insertionnumber\currentinsertion\endcsname}
+
+\appendtoks
+    \ifempty\currentinsertionparent \else
+        \page_inserts_synchronize_registers
+    \fi
+\to \everysetupinsertion
+
+\protected\def\page_inserts_process#1% beware, this adapts currentinsertion !
+  {\edef\currentinsertion{#1}%
+   \currentinsertionnumber\csname\??insertionnumber\currentinsertion\endcsname
+   \doprocessinsert\currentinsertionnumber} % old method
+
+\permanent\protected\def\processinsertions
+  {\the\t_page_inserts_list}
+
+% \permanent\protected\def\synchronizeinsertions
+%   {\let\doprocessinsert\page_inserts_synchronize
+%    \processinsertions}
+%
+% \protected\def\page_inserts_synchronize#1% yes or no
+%   {\ifvoid#1\else
+%      \page_inserts_inject#1{\unvbox#1}%
+%    \fi}
+
+\permanent\protected\def\doifelseinsertion#1%
+  {\ifcsname\??insertionnumber#1\endcsname
+     \expandafter\firstoftwoarguments
+   \else
+     \expandafter\secondoftwoarguments
+   \fi}
+
+\aliased\let\doifinsertionelse\doifelseinsertion
+
+% \protected\def\startinsertion[#1]%
+%   {\page_inserts_inject\csname\??insertionnumber#1\endcsname\bgroup}
+%
+% \protected\def\stopinsertion
+%   {\egroup}
+
+% For the moment we use the regular insertion allocator so that users can still
+% define their own insertions (not that they will play nicely with all context
+% mechanisms then). We can use the dimensions at the \LUA\ end so we don't need to
+% pass pass them explicitly. Actually, when we see an insertion node at that end,
+% we already know the number.
+
+\insertmode\plustwo
+
+% \ifnum\insertmode=\plustwo
+
+    \protected\def\page_inserts_inject        {\insert}
+
+    \protected\def\page_inserts_set_limit     {\insertlimit}
+    \protected\def\page_inserts_set_distance  {\insertdistance}
+    \protected\def\page_inserts_set_multiplier{\insertmultiplier}
+    \protected\def\page_inserts_set_penalty   {\insertpenalty}
+    \protected\def\page_inserts_set_maxdepth  {\insertmaxdepth}
+
+    \protected\def\page_inserts_get_limit     {\insertlimit}
+    \protected\def\page_inserts_get_distance  {\insertdistance}
+    \protected\def\page_inserts_get_multiplier{\insertmultiplier}
+    \protected\def\page_inserts_get_penalty   {\insertpenalty}
+    \protected\def\page_inserts_get_maxdepth  {\insertmaxdepth}
+
+    \protected\def\page_inserts_get_boxed     {\insertbox}
+    \protected\def\page_inserts_get_copied    {\insertcopy}
+    \protected\def\page_inserts_get_unboxed   {\insertunbox}
+    \protected\def\page_inserts_get_uncopied  {\insertuncopy}
+
+    \protected\def\page_inserts_get_height    {\insertheight}
+    \protected\def\page_inserts_get_depth     {\insertdepth}
+    \protected\def\page_inserts_get_width     {\insertwidth}
+
+% \else
+%
+%     \protected\def\page_inserts_inject        {\insert}
+%
+%     \protected\def\page_inserts_set_limit     {\global\dimen}
+%     \protected\def\page_inserts_set_distance  {\global\skip }
+%     \protected\def\page_inserts_set_multiplier{\global\count}
+%
+%     \protected\def\page_inserts_get_limit     {\dimen}
+%     \protected\def\page_inserts_get_distance  {\skip }
+%     \protected\def\page_inserts_get_multiplier{\count}
+%
+%     \protected\def\page_inserts_get_boxed     {\box}
+%     \protected\def\page_inserts_get_copied    {\copy}
+%     \protected\def\page_inserts_get_unboxed   {\unvbox}
+%     \protected\def\page_inserts_get_uncopied  {\unvcopy}
+%
+%     \protected\def\page_inserts_get_height    {\ht}
+%     \protected\def\page_inserts_get_depth     {\dp}
+%     \protected\def\page_inserts_get_width     {\wd}
+%
+% \fi
+
+\newcount\c_page_inserts_last_allocated
+
+\appendtoks
+    \ifempty\currentinsertionparent
+        \ifcsname\??insertionnumber\currentinsertion\endcsname
+          % bad news
+        \else
+          %expandafter\newinsert\csname\??insertionnumber\currentinsertion\endcsname
+          \global\advance\c_page_inserts_last_allocated\plusone
+          \global\expandafter\integerdef\csname\??insertionnumber\currentinsertion\endcsname\c_page_inserts_last_allocated
+          \page_inserts_synchronize_registers
+          \clf_defineinsertion
+            {\currentinsertion}%
+            {%
+                number \currentinsertionnumber
+            }%
+          \relax
+%           \t_page_inserts_list\expandafter\expandafter\expandafter
+%             {\expandafter\the\expandafter\t_page_inserts_list
+%              \expandafter\page_inserts_process\csname\??insertionnumber\currentinsertion\endcsname}%
+          \xtoksapp\t_page_inserts_list{\page_inserts_process{\currentinsertion}}%
+          \page_inserts_set_multiplier\currentinsertionnumber\plusthousand
+          \page_inserts_set_distance  \currentinsertionnumber\zeropoint
+          \page_inserts_set_limit     \currentinsertionnumber\maxdimen
+       \fi
+    \else
+      \letcsname\??insertionnumber\currentinsertion\expandafter\endcsname
+         \csname\??insertionnumber\currentinsertionparent\endcsname
+    \fi
+\to \everydefineinsertion
+
+\appendtoks
+    \ifempty\currentinsertionparent \else
+        \clf_setupinsertion
+          {\currentinsertion}
+          {%
+            location {\insertionparameter\c!location}%
+          }%
+        \relax
+    \fi
+\to \everysetupinsertion
+
+\protected\def\page_inserts_set_location#1#2% fast one
+  {\clf_setinsertionlocation{#1}{#2}}
+
+%D Auxiliary macros:
+
+\def\page_insert_insertion_height#1%
+  {\dimexpr\expandafter\page_insert_insertion_height_indeed\csname\??insertionnumber#1\endcsname\relax}
+
+% \def\page_insert_insertion_height_indeed#1%
+%   {\ifvoid#1\zeropoint\else1\page_inserts_get_distance#1+\ht#1\fi}
+
+\def\page_insert_insertion_height_indeed#1%
+  {\ifzeropt\page_inserts_get_height#1\zeropoint\else\dimexpr\page_inserts_get_distance#1\relax+\page_inserts_get_height#1\fi}
+
+\protect \endinput
