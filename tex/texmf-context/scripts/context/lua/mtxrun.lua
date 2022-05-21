@@ -25429,364 +25429,163 @@ end -- of closure
 
 do -- create closure to overcome 200 locals limit
 
-package.loaded["util-lib"] = package.loaded["util-lib"] or true
+package.loaded["libs-ini"] = package.loaded["libs-ini"] or true
 
--- original size: 17738, stripped down to: 9559
+-- original size: 6524, stripped down to: 4064
 
-if not modules then modules={} end modules ['util-lib']={
+if not modules then modules={} end modules ['libs-ini']={
  version=1.001,
  comment="companion to luat-lib.mkiv",
  author="Hans Hagen, PRAGMA-ADE, Hasselt NL",
  copyright="PRAGMA ADE / ConTeXt Development Team",
- license="see context related readme files",
+ license="see context related readme files"
 }
-local type=type
-local next=next
-local pcall=pcall
-local gsub=string.gsub
+local type,unpack=type,unpack
 local find=string.find
-local sort=table.sort
-local pathpart=file.pathpart
 local nameonly=file.nameonly
 local joinfile=file.join
-local removesuffix=file.removesuffix
 local addsuffix=file.addsuffix
-local findfile=resolvers.findfile
-local findfiles=resolvers.findfiles
-local expandpaths=resolvers.expandedpathlistfromvariable
 local qualifiedpath=file.is_qualified_path
 local isfile=lfs.isfile
-local done=false
-local function locate(required,version,trace,report,action)
- if type(required)~="string" then
-  report("provide a proper library name")
-  return
- end
- if trace then
-  report("requiring library %a with version %a",required,version or "any")
- end
- local found_library=nil
- local required_full=gsub(required,"%.","/") 
- local required_path=pathpart(required_full)
- local required_base=nameonly(required_full)
- if qualifiedpath(required) then
-  if isfile(addsuffix(required,os.libsuffix)) then
-   if trace then
-    report("qualified name %a found",required)
-   end
-   found_library=required
-  else
-   if trace then
-    report("qualified name %a not found",required)
-   end
-  end
- else
-  local required_name=required_base.."."..os.libsuffix
-  local version=type(version)=="string" and version~="" and version or false
-  local engine=environment.ownmain or false
-  if trace and not done then
-   local list=expandpaths("lib") 
-   for i=1,#list do
-      report("tds path %i: %s",i,list[i])
-   end
-  end
-  local function found(locate,asked_library,how,...)
-   if trace then
-    report("checking %s: %a",how,asked_library)
-   end
-   return locate(asked_library,...)
-  end
-  local function check(locate,...)
-   local found=nil
-   if version then
-    local asked_library=joinfile(required_path,version,required_name)
-    if trace then
-     report("checking %s: %a","with version",asked_library)
-    end
-    found=locate(asked_library,...)
-   end
-   if not found or found=="" then
-    local asked_library=joinfile(required_path,required_name)
-    if trace then
-     report("checking %s: %a","with version",asked_library)
-    end
-    found=locate(asked_library,...)
-   end
-   return found and found~="" and found or false
-  end
-  local function attempt(checkpattern)
-   if trace then
-    report("checking tds lib paths strictly")
-   end
-   local found=findfile and check(findfile,"lib")
-   if found and (not checkpattern or find(found,checkpattern)) then
-    return found
-   end
-   if trace then
-    report("checking tds lib paths with wildcard")
-   end
-   local asked_library=joinfile(required_path,".*",required_name)
-   if trace then
-    report("checking %s: %a","latest version",asked_library)
-   end
-   local list=findfiles(asked_library,"lib",true)
-   if list and #list>0 then
-    sort(list)
-    local found=list[#list]
-    if found and (not checkpattern or find(found,checkpattern)) then
-     return found
-    end
-   end
-   if trace then
-    report("checking lib paths")
-   end
-   package.extralibpath(environment.ownpath)
-   local paths=package.libpaths()
-   local pattern="/[^/]+%."..os.libsuffix.."$"
-   for i=1,#paths do
-    required_path=gsub(paths[i],pattern,"")
-    local found=check(lfs.isfound)
-    if type(found)=="string" and (not checkpattern or find(found,checkpattern)) then
-     return found
-    end
-   end
-   return false
-  end
-  if engine then
-   if trace then
-    report("attemp 1, engine %a",engine)
-   end
-   found_library=attempt("/"..engine.."/")
-   if not found_library then
-    if trace then
-     report("attemp 2, no engine",asked_library)
-    end
-    found_library=attempt()
-   end
-  else
-   found_library=attempt()
-  end
- end
- if not found_library then
-  if trace then
-   report("not found: %a",required)
-  end
-  library=false
- else
-  if trace then
-   report("found: %a",found_library)
-  end
-  local result,message=action(found_library,required_base)
-  if result then
-   library=result
-  else
-   library=false
-   report("load error: message %a, library %a",tostring(message or "unknown"),found_library or "no library")
-  end
- end
- if trace then
-  if not library then
-   report("unknown library: %a",required)
-  else
-   report("stored library: %a",required)
-  end
- end
- return library or nil
-end
-resolvers.locatelib=locate
-do
- local report_swiglib=logs.reporter("swiglib")
- local trace_swiglib=false
- local savedrequire=require
- local loadedlibs={}
- local loadlib=package.loadlib
- local pushdir=dir.push
- local popdir=dir.pop
- trackers.register("resolvers.swiglib",function(v) trace_swiglib=v end)
- function requireswiglib(required,version)
-  local library=loadedlibs[library]
-  if library==nil then
-   local trace_swiglib=trace_swiglib or package.helpers.trace
-   library=locate(required,version,trace_swiglib,report_swiglib,function(name,base)
-    pushdir(pathpart(name))
-    local opener="luaopen_"..base
-    if trace_swiglib then
-     report_swiglib("opening: %a with %a",name,opener)
-    end
-    local library,message=loadlib(name,opener)
-    local libtype=type(library)
-    if libtype=="function" then
-     library=library()
-    else
-     report_swiglib("load error: %a returns %a, message %a, library %a",opener,libtype,(string.gsub(message or "no message","[%s]+$","")),found_library or "no library")
-     library=false
-    end
-    popdir()
-    return library
-   end)
-   loadedlibs[required]=library or false
-  end
-  return library
- end
- function require(name,version)
-  if find(name,"^swiglib%.") then
-   return requireswiglib(name,version)
-  else
-   return savedrequire(name)
-  end
- end
- local swiglibs={}
- local initializer="core"
- function swiglib(name,version)
-  local library=swiglibs[name]
-  if not library then
-   statistics.starttiming(swiglibs)
-   if trace_swiglib then
-    report_swiglib("loading %a",name)
-   end
-   if not find(name,"%."..initializer.."$") then
-    fullname="swiglib."..name.."."..initializer
-   else
-    fullname="swiglib."..name
-   end
-   library=requireswiglib(fullname,version)
-   swiglibs[name]=library
-   statistics.stoptiming(swiglibs)
-  end
-  return library
- end
- statistics.register("used swiglibs",function()
-  if next(swiglibs) then
-   return string.format("%s, initial load time %s seconds",table.concat(table.sortedkeys(swiglibs)," "),statistics.elapsedtime(swiglibs))
-  end
- end)
-end
-if FFISUPPORTED and ffi and ffi.load then
- local report_ffilib=logs.reporter("ffilib")
- local trace_ffilib=false
- local savedffiload=ffi.load
- trackers.register("resolvers.ffilib",function(v) trace_ffilib=v end)
- local loaded={}
- local function locateindeed(name)
-  name=removesuffix(name)
-  local l=loaded[name]
-  if l==nil then
-   local state,library=pcall(savedffiload,name)
-   if type(library)=="userdata" then
-    l=library
-   elseif type(state)=="userdata" then
-    l=state
-   else
-    l=false
-   end
-   loaded[name]=l
-  elseif trace_ffilib then
-   report_ffilib("reusing already loaded %a",name)
-  end
-  return l
- end
- local function getlist(required)
-  local list=directives.value("system.librarynames" )
-  if type(list)=="table" then
-   list=list[required]
-   if type(list)=="table" then
-    if trace then
-     report("using lookup list for library %a: % | t",required,list)
-    end
-    return list
-   end
-  end
-  return { required }
- end
- function ffilib(name,version)
-  name=removesuffix(name)
-  local l=loaded[name]
-  if l~=nil then
-   if trace_ffilib then
-    report_ffilib("reusing already loaded %a",name)
-   end
-   return l
-  end
-  local list=getlist(name)
-  if version=="system" then
-   for i=1,#list do
-    local library=locateindeed(list[i])
-    if type(library)=="userdata" then
-     return library
-    end
-   end
-  else
-   for i=1,#list do
-    local library=locate(list[i],version,trace_ffilib,report_ffilib,locateindeed)
-    if type(library)=="userdata" then
-     return library
-    end
-   end
-  end
- end
- function ffi.load(name)
-  local list=getlist(name)
-  for i=1,#list do
-   local library=ffilib(list[i])
-   if type(library)=="userdata" then
-    return library
-   end
-  end
-  if trace_ffilib then
-   report_ffilib("trying to load %a using normal loader",name)
-  end
-  for i=1,#list do
-   local state,library=pcall(savedffiload,list[i])
-   if type(library)=="userdata" then
-    return library
-   elseif type(state)=="userdata" then
-    return library
-   end
-  end
- end
-end
-do
- local isfile=lfs.isfile
- local report=logs.reporter("resolvers","lib")
- local trace=false
- trackers.register("resolvers.lib",function(v) trace=v end)
- local function action(filename)
-  return isfile(filename) and filename or false
- end
- function resolvers.findlib(required) 
+local findfile=resolvers.findfile
+local expandpaths=resolvers.expandedpathlistfromvariable
+local report=logs.reporter("resolvers","libraries")
+local trace=false
+local silent=false
+trackers.register("resolvers.lib",function(v) trace=v end)
+trackers.register("resolvers.lib.silent",function(v) silent=v end)
+local function findlib(required) 
+ local suffix=os.libsuffix or "so"
+ if not qualifiedpath(required) then
   local list=directives.value("system.librarynames" )
   local only=nameonly(required)
   if type(list)=="table" then
    list=list[only]
-   if type(list)=="table" then
-    if trace then
-     report("using lookup list for library %a: % | t",only,list)
-    end
-   else
+   if type(list)~="table" then
     list={ only }
    end
   else
    list={ only }
   end
+  if trace then
+   report("using lookup list for library %a: % | t",only,list)
+  end
   for i=1,#list do
    local name=list[i]
-   local found=locate(name,false,trace,report,action)
-   if found then
+   local found=findfile(name,"lib")
+   if not found or found=="" then
+    found=findfile(addsuffix(name,suffix),"lib")
+   end
+   if found and found~="" then
+    if trace then
+     report("library %a resolved via %a path to %a",name,"tds lib",found)
+    end
     return found
    end
   end
-  local getpaths=resolvers.expandedpathlistfromvariable
-  if getpaths then
-   local list=getpaths("PATH")
-   local base=addsuffix(only,os.libsuffix)
+  if expandpaths then
+   local list=expandpaths("PATH")
+   local base=addsuffix(only,suffix)
    for i=1,#list do
     local full=joinfile(list[i],base)
-    local found=locate(full,false,trace,report,action)
-    if found then
+    local found=isfile(full) and full
+    if found and found~="" then
+     if trace then
+      report("library %a resolved via %a path to %a",full,"system",found)
+     end
      return found
     end
    end
   end
+ elseif isfile(addsuffix(required,suffix)) then
+  if trace then
+   report("library with qualified name %a %sfound",required,"")
+  end
+  return required
+ else
+  if trace then
+   report("library with qualified name %a %sfound",required,"not ")
+  end
+ end
+ return false
+end
+local foundlibraries=table.setmetatableindex(function(t,k)
+ local v=findlib(k)
+ t[k]=v
+ return v
+end)
+function resolvers.findlib(required)
+ return foundlibraries[required]
+end
+local libraries={}
+resolvers.libraries=libraries
+local report=logs.reporter("optional")
+if optional then optional.loaded={} end
+function libraries.validoptional(name)
+ local thelib=optional and optional[name]
+ if not thelib then
+ elseif thelib.initialize then
+  return thelib
+ else
+  report("invalid optional library %a",libname)
+ end
+end
+function libraries.optionalloaded(name,libnames)
+ local thelib=optional and optional[name]
+ if not thelib then
+  report("no optional %a library found",name)
+ else
+  local thelib_initialize=thelib.initialize
+  if not thelib_initialize then
+   report("invalid optional library %a",name)
+  else
+   if type(libnames)=="string" then
+    libnames={ libnames }
+   end
+   if type(libnames)=="table" then
+    for i=1,#libnames do
+     local libname=libnames[i]
+     local filename=foundlibraries[libname]
+     if filename and filename~="" then
+      libnames[i]=filename
+     else
+      report("unable to locate library %a",libname)
+      return
+     end
+    end
+    local initialized=thelib_initialize(unpack(libnames))
+    if not initialized then
+     report("unable to initialize library '% + t'",libnames)
+    elseif not silent then
+     report("using library '% + t'",libnames)
+    end
+    return initialized
+   end
+  end
+ end
+end
+if FFISUPPORTED and ffi and ffi.load then
+ local ffiload=ffi.load
+ function ffi.load(name)
+  local full=name and foundlibraries[name]
+  if full then
+   return ffiload(full)
+  else
+   return ffiload(name)
+  end
+ end
+end
+local dofile=dofile
+local savedrequire=require
+function require(name,version)
+ if find(name,"%.lua$") or find(name,"%.lmt$") then
+  local m=dofile(findfile(name))
+  if m then
+   package.loaded[name]=m
+   return m
+  end
+ else
+  return savedrequire(name)
  end
 end
 
@@ -26185,10 +25984,10 @@ end
 
 end -- of closure
 
--- used libraries    : l-bit32.lua l-lua.lua l-macro.lua l-sandbox.lua l-package.lua l-lpeg.lua l-function.lua l-string.lua l-table.lua l-io.lua l-number.lua l-set.lua l-os.lua l-file.lua l-gzip.lua l-md5.lua l-sha.lua l-url.lua l-dir.lua l-boolean.lua l-unicode.lua l-math.lua util-str.lua util-tab.lua util-fil.lua util-sac.lua util-sto.lua util-prs.lua util-fmt.lua util-soc-imp-reset.lua util-soc-imp-socket.lua util-soc-imp-copas.lua util-soc-imp-ltn12.lua util-soc-imp-mime.lua util-soc-imp-url.lua util-soc-imp-headers.lua util-soc-imp-tp.lua util-soc-imp-http.lua util-soc-imp-ftp.lua util-soc-imp-smtp.lua trac-set.lua trac-log.lua trac-inf.lua trac-pro.lua util-lua.lua util-deb.lua util-tpl.lua util-sbx.lua util-mrg.lua util-env.lua luat-env.lua util-zip.lua lxml-tab.lua lxml-lpt.lua lxml-mis.lua lxml-aux.lua lxml-xml.lua trac-xml.lua data-ini.lua data-exp.lua data-env.lua data-tmp.lua data-met.lua data-res.lua data-pre.lua data-inp.lua data-out.lua data-fil.lua data-con.lua data-use.lua data-zip.lua data-tre.lua data-sch.lua data-lua.lua data-aux.lua data-tmf.lua data-lst.lua util-lib.lua luat-sta.lua luat-fmt.lua
+-- used libraries    : l-bit32.lua l-lua.lua l-macro.lua l-sandbox.lua l-package.lua l-lpeg.lua l-function.lua l-string.lua l-table.lua l-io.lua l-number.lua l-set.lua l-os.lua l-file.lua l-gzip.lua l-md5.lua l-sha.lua l-url.lua l-dir.lua l-boolean.lua l-unicode.lua l-math.lua util-str.lua util-tab.lua util-fil.lua util-sac.lua util-sto.lua util-prs.lua util-fmt.lua util-soc-imp-reset.lua util-soc-imp-socket.lua util-soc-imp-copas.lua util-soc-imp-ltn12.lua util-soc-imp-mime.lua util-soc-imp-url.lua util-soc-imp-headers.lua util-soc-imp-tp.lua util-soc-imp-http.lua util-soc-imp-ftp.lua util-soc-imp-smtp.lua trac-set.lua trac-log.lua trac-inf.lua trac-pro.lua util-lua.lua util-deb.lua util-tpl.lua util-sbx.lua util-mrg.lua util-env.lua luat-env.lua util-zip.lua lxml-tab.lua lxml-lpt.lua lxml-mis.lua lxml-aux.lua lxml-xml.lua trac-xml.lua data-ini.lua data-exp.lua data-env.lua data-tmp.lua data-met.lua data-res.lua data-pre.lua data-inp.lua data-out.lua data-fil.lua data-con.lua data-use.lua data-zip.lua data-tre.lua data-sch.lua data-lua.lua data-aux.lua data-tmf.lua data-lst.lua libs-ini.lua luat-sta.lua luat-fmt.lua
 -- skipped libraries : -
--- original bytes    : 1042843
--- stripped bytes    : 411771
+-- original bytes    : 1031629
+-- stripped bytes    : 406052
 
 -- end library merge
 

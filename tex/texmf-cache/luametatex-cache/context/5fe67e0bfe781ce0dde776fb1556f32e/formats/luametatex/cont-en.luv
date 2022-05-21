@@ -1,0 +1,9 @@
+return {
+ ["enginebanner"]="This is LuaMetaTeX, Version 2.09.50",
+ ["formatbanner"]="2022.05.11 11:36",
+ ["formatid"]=651,
+ ["functionality"]=20220429,
+ ["luaversion"]=0x1.599999999999ap+2,
+ ["sourcefile"]="context.mkxl",
+ ["sourcehash"]="4e71f254e04bb8cf6de97a5e37b389e8",
+}
