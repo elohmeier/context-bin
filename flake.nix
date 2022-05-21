@@ -24,7 +24,7 @@
 
           # download modules
           GARDENRSYNC="contextgarden.net::minimals/current/modules"
-          for module in $(${final.rsync}/bin/rsync "''${GARDENRSYNC}/*" | gawk '{print $NF}'); do \
+          for module in $(${final.rsync}/bin/rsync "''${GARDENRSYNC}/*" | ${final.gawk}/bin/gawk '{print $NF}'); do \
             echo "Syncing ''${module}" && \
               ${final.rsync}/bin/rsync -rpztlv "''${GARDENRSYNC}/''${module}/" ./tex/texmf-modules/; \
           done
@@ -44,7 +44,7 @@
             mkdir -p tex/texmf-fonts
             # add your fonts here
 
-            patchelf --set-interpreter $(cat ${final.stdenv.cc}/nix-support/dynamic-linker) tex/texmf-linux-64/bin/{luametatex,luatex}
+            ${final.patchelf}/bin/patchelf --set-interpreter $(cat ${final.stdenv.cc}/nix-support/dynamic-linker) tex/texmf-linux-64/bin/{luametatex,luatex}
 
             ./tex/texmf-linux-64/bin/mtxrun --generate
             ./tex/texmf-linux-64/bin/mtxrun --script cache --erase
