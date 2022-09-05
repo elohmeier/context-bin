@@ -5,7 +5,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      supportedSystems = [ "aarch64-darwin" "x86_64-linux" ];
+      supportedSystems = [ "aarch64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system: f system);
     in
     {
@@ -13,6 +13,7 @@
         let
           platform = {
             aarch64-darwin = "osx-arm64";
+            aarch64-linux = "linux-aarch64";
             x86_64-linux = "linux-64";
           }.${final.system};
           isLinux = final.stdenv.hostPlatform.isLinux;
@@ -29,6 +30,7 @@
             # download core environment
             ${final.lib.optionalString isLinux "${final.patchelf}/bin/patchelf --set-interpreter $(cat ${final.stdenv.cc}/nix-support/dynamic-linker) $TMP_DIR/bin/mtxrun"}
             $TMP_DIR/bin/mtxrun --script mtx-install.lua --update --server="lmtx.contextgarden.net,lmtx.pragma-ade.com,lmtx.pragma-ade.nl" --instance="install-lmtx" --platform="linux-64" --erase --extras=""
+            $TMP_DIR/bin/mtxrun --script mtx-install.lua --update --server="lmtx.contextgarden.net,lmtx.pragma-ade.com,lmtx.pragma-ade.nl" --instance="install-lmtx" --platform="linux-aarch64" --erase --extras=""
             $TMP_DIR/bin/mtxrun --script mtx-install.lua --update --server="lmtx.contextgarden.net,lmtx.pragma-ade.com,lmtx.pragma-ade.nl" --instance="install-lmtx" --platform="osx-arm64" --erase --extras=""
 
             # download modules
