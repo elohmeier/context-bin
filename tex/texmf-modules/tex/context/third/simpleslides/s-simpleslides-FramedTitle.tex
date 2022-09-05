@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-FramedTitle,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- FramedTitle style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -25,9 +25,9 @@
 \setuplayout [width=fit,
               margin=0cm,
               height=fit,
-              header=2.2cm, 
-              footer=.8cm, 
-              topspace=.6cm, 
+              header=2.2cm,
+              footer=.8cm,
+              topspace=.6cm,
               backspace=1cm,
               location=singlesided]
 
@@ -61,11 +61,11 @@
 
 %D We let Metapost calculate the background:
 
-\startuniqueMPgraphic{simpleslides:MP:horizontal} 
+\startuniqueMPgraphic{simpleslides:MP:horizontal}
 StartPage ;
 fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
 StopPage ;
-\stopuniqueMPgraphic 
+\stopuniqueMPgraphic
 
 \startuseMPgraphic{simpleslides:MP:ornament}
 StartPage ;
@@ -83,7 +83,7 @@ pickup pencircle scaled 3pt ;
 for i := NOfPages-1 downto 1:
   draw (if i mod 5 = 0 : q else : p fi)
        shifted (i*5pt, 0pt)
-       withcolor if i < PageNumber : \MPcolor{simpleslides:contrastcolor} 
+       withcolor if i < RealPageNumber : \MPcolor{simpleslides:contrastcolor}
                  else :              \MPcolor{simpleslides:variantcolor}
                  fi ;
 endfor ;
@@ -92,21 +92,21 @@ StopPage ;
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D We want the title to placed in a framed box. We redefine all the keys of
 %D \type{\setupTitle}, so that the module is easier to maintain.
@@ -128,7 +128,7 @@ StopPage ;
    \c!title\c!align=\v!middle,
    \c!author\c!style=,
    \c!author\c!color=simpleslides:backgroundcolor,
-   \c!author\c!align=\v!middle, 
+   \c!author\c!align=\v!middle,
    \c!date\c!style=,
    \c!date\c!color=simpleslides:backgroundcolor,
    \c!date\c!align=\v!middle,
@@ -149,7 +149,7 @@ StopPage ;
    \c!color=simpleslides:backgroundcolor]
 
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color=simpleslides:contrastcolor]
@@ -158,4 +158,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

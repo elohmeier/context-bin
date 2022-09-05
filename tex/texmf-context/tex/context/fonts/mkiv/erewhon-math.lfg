@@ -1,4 +1,4 @@
--- this file might go away and is for experiments only
+-- This file might go away and is for experiments only.
 
 return {
     name = "erewhon-math",
@@ -8,10 +8,16 @@ return {
     copyright = "ConTeXt development team",
     mathematics = {
         parameters = {
-            NoLimitSupFactor =   0,
-            NoLimitSubFactor = 900,
-            AccentBaseHeight = 0,
-            AccentBaseDepth = 60,
+            NoLimitSupFactor                =    0,
+            NoLimitSubFactor                =  900,
+            AccentBaseHeight                =    0,
+            AccentBaseDepth                 =   60,
+            RadicalDegreeBottomRaisePercent =   55,
+            RadicalKernAfterDegree          = -600,
+            RadicalRuleThickness            =   45, -- 55 in font
+            DelimiterPercent                =   90,
+            DelimiterShortfall              =  400,
+         -- DisplayOperatorMinHeight        = 1800, -- 1300 in font (one size)
         },
         tweaks = {
             aftercopying = {
@@ -24,6 +30,44 @@ return {
                          -- topright    =  0,
                             bottomright =  -0.15,
                        },
+
+                        ["0x7D.parts.top"] = {
+                            topright    = -0.15,
+                        }, -- right brace top
+                        ["0x7D.parts.bottom"] = {
+                            bottomright = -0.15,
+                        }, -- right brace bottom
+                        ["0x7D.variants.*"] = {
+                            topright = -0.05,
+                            bottomright = -0.05,
+                        }, -- right brace variants
+                        ["0x29.parts.top"] = {
+                            topright    = -0.1,
+                        }, -- right parenthesis top
+                        ["0x29.parts.bottom"] = {
+                            bottomright = -0.1,
+                        }, -- right parenthesis bottom
+                        ["0x29.variants.*"] = {
+                            topright = -0.1,
+                            bottomright = -0.1,
+                        }, -- right parenthesis variants
+                        ["0x221A.parts.top"] = {
+                            topright = 0.2,
+                        }, -- right radical top
+                        ["0x221A.parts.bottom"] = {
+                            bottomright = 0.2,
+                        }, -- right radical bottom
+                        ["0x221A.variants.*"] = {
+                            topright = 0.2,
+                            bottomright = 0.2,
+                        }, -- right radical variants
+
+                        -- angle
+                        [0x27E9]              = { topright = -0.1, bottomright = -0.1 },
+                        ["0x27E9.variants.*"] = { topright = -0.2, bottomright = -0.2 },
+                        [0x27EB]              = { topright = -0.1, bottomright = -0.1 },
+                        ["0x27EB.variants.*"] = { topright = -0.2, bottomright = -0.2 },
+
                     },
                 },
                 {
@@ -43,8 +87,14 @@ return {
                 {
                     tweak = "addrules",
                 },
+                {
+                    tweak = "addactuarian",
+                },
+                {
+                    tweak = "addequals",
+                },
             },
-        },      
+        },
         bigslots = {
             1, 2, 3, 4
         },

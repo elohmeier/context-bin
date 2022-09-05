@@ -156,6 +156,10 @@ function constructors.aftercopyingcharacters(target,original)
     -- can be used for additional tweaking
 end
 
+function constructors.beforepassingfonttotex(tfmdata)
+    -- can be used for additional tweaking
+end
+
 function constructors.trytosharefont(target,tfmdata)
     -- implemented in font-def.lmt
 end
@@ -704,9 +708,9 @@ function constructors.scale(tfmdata,specification)
             end
             local va = character.accent
             if va then
-                chr.topaccent = vdelta*va
+                chr.topaccent = va*vdelta
             end
-            if stackmath then
+            if stackmath then -- not ok yet
                 local mk = character.mathkerns
                 if mk then
                     local tr = mk.topright
@@ -755,6 +759,10 @@ function constructors.scale(tfmdata,specification)
             if fa then
                 chr.flataccent = fa
             end
+            local m = character.leftmargin   if m and m ~= 0 then chr.leftmargin   = m*hdelta end
+            local m = character.rightmargin  if m and m ~= 0 then chr.rightmargin  = m*hdelta end
+            local m = character.topmargin    if m and m ~= 0 then chr.topmargin    = m*hdelta end
+            local m = character.bottommargin if m and m ~= 0 then chr.bottommargin = m*hdelta end
         elseif autoitalicamount then -- itlc feature
             local vi = description.italic
             if not vi then
@@ -806,6 +814,10 @@ function constructors.scale(tfmdata,specification)
         local vc = character.commands
         if vc then
             chr.commands = scalecommands(vc,hdelta,vdelta)
+        end
+        local cb = character.callback
+        if cb then
+            chr.callback = cb
         end
         -- we assume that these are done in a manipulator afterwards
         -- as it makes no sense otherwise

@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-Split,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Split style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -28,9 +28,9 @@
 \setuplayout [width=fit,
               margin=0cm,
               height=fit,
-              header=3.2cm, 
-              footer=.5cm, 
-              topspace=.6cm, 
+              header=3.2cm,
+              footer=.5cm,
+              topspace=.6cm,
               backspace=1cm,
               location=singlesided]
 
@@ -42,6 +42,12 @@
 
 \setuplayer[simpleslides:layer:slidetitle]
     [x=10mm,y=12mm]
+
+%D Some strings are configurable.
+
+\setuplabeltext [\s!en]    [of=of]
+\setuplabeltext [\s!de]    [of=von]
+
 
 %D These macros are used for placing figures/pictures:
 
@@ -89,7 +95,7 @@
 %D Now we use \METAPOST\ to draw a page ornament, which will then be inherited
 %D by different backgrounds.
 
-\startuseMPgraphic{simpleslides:MP:ornament} 
+\startuseMPgraphic{simpleslides:MP:ornament}
 StartPage ;
 save p, Main, a ;
 path p[] ; path Main ;
@@ -120,7 +126,7 @@ fill p[4] withcolor \MPcolor{simpleslides:contrastcolor} ;
 draw \sometxt[simpleslides:sometxt:left]{\getvariable{simpleslides:title}{date}}
      shifted (1cm,y1) ;
 
-draw \sometxt[simpleslides:sometxt:right]{\folio\ of \lastpage}
+draw \sometxt[simpleslides:sometxt:right]{\pagenumber\ \labeltext{of} \lastpage}
      shifted (x5,y1) ;
 
 draw \sometxt[simpleslides:sometxt:left]{\getvariable{simpleslides:title}{author}}
@@ -130,17 +136,17 @@ draw \sometxt[simpleslides:sometxt:right]{\getvariable{simpleslides:title}{title
       shifted (x5,0) ;
 
 StopPage ;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 
 %D We use this ornament in different backgrounds.
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D We want the title to placed in a framed box. We redefine all the keys of
 %D \type{\setupTitle}, so that the module is easier to maintain.
@@ -162,7 +168,7 @@ StopPage ;
    \c!title\c!align=,%\v!middle,
    \c!author\c!style=,
    \c!author\c!color=,
-   \c!author\c!align=,%\v!middle, 
+   \c!author\c!align=,%\v!middle,
    \c!date\c!style=,
    \c!date\c!color=,
    \c!date\c!align=,%\v!middle,
@@ -183,7 +189,7 @@ StopPage ;
    \c!color=simpleslides:backgroundcolor]
 
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][\c!color={simpleslides:itemize:color}]
@@ -192,4 +198,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

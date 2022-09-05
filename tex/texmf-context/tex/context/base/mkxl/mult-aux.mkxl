@@ -814,15 +814,18 @@
 
 \newcount\c_mult_interfaces_n_of_namespaces
 
+% \def\v_interfaces_prefix_template
+%   {\number\c_mult_interfaces_n_of_namespaces>}
+
 \def\v_interfaces_prefix_template
-  {\number\c_mult_interfaces_n_of_namespaces>}
+  {\tohexadecimal\c_mult_interfaces_n_of_namespaces>}
 
 \permanent\protected\def\installnamespace#1% for modules and users
   {\ifcsname ????#1\endcsname
      \writestatus\m!system{duplicate user namespace '#1'}\wait
    \else
      \global\advance\c_mult_interfaces_n_of_namespaces\plusone
-     \immutable\edefcsname ????#1\endcsname{\v_interfaces_prefix_template}%
+     \immutable\xdefcsname ????#1\endcsname{\v_interfaces_prefix_template}%
    \fi}
 
 \permanent\protected\def\installcorenamespace#1%
@@ -830,7 +833,7 @@
      \writestatus\m!system{duplicate core namespace '#1'}\wait
    \else
      \global\advance\c_mult_interfaces_n_of_namespaces\plusone
-     \immutable\edefcsname ??#1\endcsname{\v_interfaces_prefix_template}%
+     \immutable\xdefcsname ??#1\endcsname{\v_interfaces_prefix_template}%
      \clf_registernamespace\c_mult_interfaces_n_of_namespaces{#1}%
    \fi}
 
@@ -1088,21 +1091,6 @@
      \expandafter\noexpand\csname #1:\s!counter\endcsname
      \expandafter\noexpand\csname current#2\endcsname
      \expandafter\noexpand\csname setlocal#2current\endcsname}}
-
-% The \LUA\ based variant is twice as fast as the above but as said, we don't use
-% this one that often. It's more about less tracing than speed here.
-
-\permanent\protected\def\installmacrostack#1%
-  {\ifdefined#1\else\mutable\let#1\empty\fi
-   \protected\gdefcsname push_macro_\csstring#1\endcsname{\localpushmacro#1}%
-   \protected\gdefcsname  pop_macro_\csstring#1\endcsname{\localpopmacro #1}}
-
-\permanent\protected\def\installglobalmacrostack#1%
-  {\ifdefined#1\else\mutable\glet#1\empty\fi
-   \protected\gdefcsname push_macro_\csstring#1\endcsname{\globalpushmacro#1}%
-   \protected\gdefcsname  pop_macro_\csstring#1\endcsname{\globalpopmacro #1}}
-
-% \showmacrostack can be used to see if there are different entries
 
 %  \unprotect
 %

@@ -29,7 +29,7 @@
 %D {YYYY.MM.DD HH:MM} format.
 
 \immutable\edef\contextformat {\jobname}
-\immutable\edef\contextversion{2022.05.11 11:36}
+\immutable\edef\contextversion{2022.08.25 19:21}
 
 %overloadmode 1 % check frozen / warning
 %overloadmode 2 % check frozen / error
@@ -39,6 +39,8 @@
 %D Kind of special:
 
 \immutable\chardef\contextlmtxmode\directlua{tex.print(CONTEXTLMTXMODE or 0)}\relax
+
+\directlua{io.output():setvbuf("line")}
 
 %D For those who want to use this:
 
@@ -133,6 +135,7 @@
 \loadmkxlfile{mult-ini}
 \loadmkxlfile{mult-sys}
 \loadmkxlfile{mult-aux}
+%doiffileelse{mult-aux-new.mkxl}{\loadmkxlfile{mult-aux-new}}{\loadmkxlfile{mult-aux}}
 \loadmkxlfile{mult-def}
 %loadmarkfile{mult-chk}
 \loadmklxfile{mult-dim}
@@ -400,7 +403,7 @@
 \loadmkxlfile{tabl-tab} % thrd-tab stripped and merged
 
 \loadmkxlfile{tabl-tbl}
-\doiffileelse{tabl-ntb-new.mkxl}{\loadmkxlfile{tabl-ntb-new}}{\loadmkxlfile{tabl-ntb}}
+\loadmkxlfile{tabl-ntb}
 \loadmkxlfile{tabl-nte}
 \loadmkxlfile{tabl-ltb}
 \loadmkxlfile{tabl-frm}
@@ -486,15 +489,18 @@
 \loadmkxlfile{math-mis}
 \loadmkxlfile{math-scr}
 \loadmkxlfile{math-int}
+\loadmkxlfile{math-dif}
 \loadmkxlfile{math-del}
 \loadmkxlfile{math-fen}
 \loadmkxlfile{math-lop}
 \loadmklxfile{math-acc}
 \loadmklxfile{math-rad}
+\loadmklxfile{math-del}
 \loadmkxlfile{math-inl}
 \loadmkxlfile{math-dis}
 %loadmkxlfile{math-lan}
 \loadmkxlfile{math-toy}
+\loadmkxlfile{math-twk}
 
 \loadmkxlfile{strc-mat}
 
@@ -515,6 +521,8 @@
 \loadmkxlfile{strc-usr}
 
 \loadmkxlfile{pack-com}
+\loadmkxlfile{math-com}
+
 \loadmkxlfile{typo-del}
 
 \loadmkxlfile{grph-trf}
@@ -531,6 +539,7 @@
 \loadmkxlfile{meta-fig}
 
 \loadmkxlfile{page-ffl}
+\loadmkxlfile{page-blk}
 
 \loadmkxlfile{lang-spa} % will become obsolete
 

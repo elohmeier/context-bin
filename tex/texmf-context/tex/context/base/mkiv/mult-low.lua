@@ -17,7 +17,8 @@ return {
         "plusthousand", "plustenthousand", "plustwentythousand", "medcard", "maxcard", "maxcardminusone",
         "zeropoint", "onepoint", "halfapoint", "onebasepoint", "maxcount", "maxdimen", "scaledpoint", "thousandpoint",
         "points", "halfpoint",
-        "zeroskip",
+        "zeroskip", "centeringskip", "stretchingskip", "shrinkingskip",
+        "centeringfillskip", "stretchingfillskip", "shrinkingfillskip",
         "zeromuskip", "onemuskip",
         "pluscxxvii", "pluscxxviii", "pluscclv", "pluscclvi",
         "normalpagebox",
@@ -104,12 +105,13 @@ return {
         "mmodeifcode", "innerifcode", "voidifcode", "hboxifcode", "vboxifcode", "xifcode", "eofifcode",
         "trueifcode", "falseifcode", "caseifcode", "definedifcode", "csnameifcode", "fontcharifcode",
         --
-        "overrulemathcontrolcode", "underrulemathcontrolcode", "radicalrulemathcontrolcode",  "fractionrulemathcontrolcode",
-        "accentskewhalfmathcontrolcode", "accentskewapplymathcontrolcode", "checkligatureandkernmathcontrolcode",
+        "overrulemathcontrolcode", "underrulemathcontrolcode", "radicalrulemathcontrolcode", "fractionrulemathcontrolcode",
+        "accentskewhalfmathcontrolcode", "accentskewapplymathcontrolcode", "applyordinarykernpairmathcontrolcode",
         "applyverticalitalickernmathcontrolcode", "applyordinaryitalickernmathcontrolcode", "applycharitalickernmathcontrolcode",
         "reboxcharitalickernmathcontrolcode", "applyboxeditalickernmathcontrolcode", "staircasekernmathcontrolcode",
-        "applytextitalickernmathcontrolcode", "applyscriptitalickernmathcontrolcode", "italicshapekernmathcontrolcode",
+        "applytextitalickernmathcontrolcode", "applyscriptitalickernmathcontrolcode",
         "checkspaceitalickernmathcontrolcode", "checktextitalickernmathcontrolcode",
+        "analyzescriptnucleuscharmathcontrolcode", "analyzescriptnucleuslistmathcontrolcode", "analyzescriptnucleusboxmathcontrolcode",
         --
         "noligaturingglyphoptioncode", "nokerningglyphoptioncode", "noexpansionglyphoptioncode", "noprotrusionglyphoptioncode",
         "noleftkerningglyphoptioncode", "noleftligaturingglyphoptioncode", "norightkerningglyphoptioncode", "norightligaturingglyphoptioncode",
@@ -166,15 +168,14 @@ return {
         "mathfractioncode", "mathmiddlecode", "mathaccentcode", "mathfencedcode", "mathghostcode",
         "mathvariablecode",  "mathactivecode", "mathvcentercode", "mathconstructcode", "mathwrappedcode",
         "mathbegincode", "mathendcode", "mathexplicitcode", "mathdivisioncode", "mathfactorialcode",
-        "mathdimensioncode",
-        --
-        "mathimaginarycode", "mathdifferentialcode", "mathexponentialcode", "mathfunctioncode", "mathdigitcode",
+        "mathdimensioncode", "mathexperimentalcode", "mathtextpunctuationcode",
+        "mathimaginarycode", "mathdifferentialcode", "mathexponentialcode", "mathellipsiscode", "mathfunctioncode", "mathdigitcode",
      -- "mathtopaccentcode", "mathbottomaccentcode", "mathdelimitercode", "mathrootcode", "mathprintcode",        --
         "mathalphacode", "mathboxcode", "mathchoicecode", "mathnothingcode", "mathlimopcode", "mathnolopcode",
+        "mathunsetcode", "mathunspacedcode", "mathallcode", "mathfakecode", "mathunarycode",
+        "mathmaybeordinarycode", "mathmayberelationcode", "mathmaybebinarycode",
         --
         "constantnumber", "constantnumberargument", "constantdimen", "constantdimenargument", "constantemptyargument",
-        --
-        "continueifinputfile",
         --
         "luastringsep", "!!bs", "!!es",
         --
@@ -210,7 +211,12 @@ return {
         --
         "nopreslackclassoptioncode", "nopostslackclassoptioncode",
         "lefttopkernclassoptioncode", "righttopkernclassoptioncode", "leftbottomkernclassoptioncode", "rightbottomkernclassoptioncode",
-        "lookaheadforendclassoptioncode", "defaultmathclassoptions",
+        "lookaheadforendclassoptioncode", "noitaliccorrectionclassoptioncode",  "defaultmathclassoptions",
+     -- "openfenceclassoptioncode", "closefenceclassoptioncode", "middlefenceclassoptioncode",
+        "checkligatureclassoptioncode", "checkitaliccorrectionclassoptioncode", "checkkernpairclassoptioncode",
+        "flattenclassoptioncode", "omitpenaltyclassoptioncode", "unpackclassoptioncode", "raiseprimeclassoptioncode",
+        "carryoverlefttopkernclassoptioncode", "carryoverleftbottomkernclassoptioncode", "carryoverrighttopkernclassoptioncode", "carryoverrightbottomkernclassoptioncode",
+        "preferdelimiterdimensionsclassoptioncode", "autoinjectclassoptioncode",
         --
         "noligaturingglyphoptioncode", "nokerningglyphoptioncode", "noleftligatureglyphoptioncode",
         "noleftkernglyphoptioncode", "norightligatureglyphoptioncode", "norightkernglyphoptioncode",
@@ -225,7 +231,7 @@ return {
         --
         "normalworddiscoptioncode", "preworddiscoptioncode", "postworddiscoptioncode",
         --
-        "continuewhenlmtxmode",
+        "continueifinputfile", "continuewhenlmtxmode", "continuewhenmkivmode",
     },
     ["helpers"] = {
         --
@@ -338,7 +344,7 @@ return {
         --
         "givenwidth", "givenheight", "givendepth", "scangivendimensions",
         --
-        "scratchwidth", "scratchheight", "scratchdepth", "scratchoffset", "scratchdistance", "scratchtotal",
+        "scratchwidth", "scratchheight", "scratchdepth", "scratchoffset", "scratchdistance", "scratchtotal", "scratchitalic",
         "scratchhsize", "scratchvsize",
         "scratchxoffset", "scratchyoffset", "scratchhoffset", "scratchvoffset",
         "scratchxposition", "scratchyposition",
@@ -581,7 +587,7 @@ return {
         --
         "assumelongusagecs",
         --
-        "Umathbotaccent", "Umathtopaccent",
+        "Umathbottomaccent", "Umathtopaccent", "Umathbotaccent",
         --
         "righttolefthbox", "lefttorighthbox", "righttoleftvbox", "lefttorightvbox", "righttoleftvtop", "lefttorightvtop",
         "rtlhbox", "ltrhbox", "rtlvbox", "ltrvbox", "rtlvtop", "ltrvtop",

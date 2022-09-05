@@ -96,8 +96,16 @@
 
 % with mimalloc and msvc we get a better native performance than crosscompiled
 
+% On the 2018 Dell 7520 Precission Xeon laptop runtime for 322 pages is now exactly
+% 8 seconds (just below 40 pages per second), we talking July 16, 2022.
+%
+% At the first of August 2022 the (slightly reorganized and updated) manual counted 350 pages
+% and took 8.6 seconds to process (some 41 pages per second), so we're rather stable.
+
 % \enableexperiments [tabulateusesize]
 % \enableexperiments [tabulatesparseskips]
+
+\linebuffering
 
 \enableexperiments[fonts.compact]
 % \enabledirectives[fonts.injections.method=advance] % tricky ... not all xoffsets are advance robust
@@ -107,7 +115,7 @@
 % \startluacode
 %     lpdf.setencryption {
 %         ownerpassword = "password",
-%         userpassword  = "",
+%         userpassword  = " ",
 %         permissions   = "print,quality"
 %     }
 % \stopluacode
@@ -135,8 +143,6 @@
 \stopfrontmatter
 
 \startbodymatter
-    \component luametatex-internals
-    \component luametatex-differences
     \component luametatex-modifications
     \component luametatex-lua
     \component luametatex-enhancements
@@ -151,10 +157,10 @@
     \component luametatex-pdf
     \component luametatex-libraries
     \component luametatex-primitives % this generates a list
+  % \component luametatex-rejected % local file
 \stopbodymatter
 
 \startbackmatter
-  % \component luametatex-rejected % local file
     \component luametatex-codes
     \component luametatex-registers
     \component luametatex-statistics

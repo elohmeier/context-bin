@@ -9,7 +9,7 @@ local dimensions, kerns  if CONTEXTLMTXMODE == 0 then
          -- [0x1D453]     = offset_f, -- 𝑓
          -- ["1:0x1D453"] = offset_f, -- needed for compact
          -- ["2:0x1D453"] = offset_f, -- needed for compact
---                 ["*:0x1D453"] = offset_f, -- 𝑓
+         -- ["*:0x1D453"] = offset_f, -- 𝑓
         },
     }
 
@@ -27,6 +27,13 @@ local dimensions, kerns  if CONTEXTLMTXMODE == 0 then
 
 end
 
+-- When set this will bypass the italic correction hackery!
+
+local integral_variants = {  bottomright = -0.20 }
+----- integral_top      = {  topright    =  0.05 }
+local integral_bottom   = {  bottomright = -0.20 }
+
+
 return {
     name = "pagella-math",
     version = "1.00",
@@ -35,11 +42,23 @@ return {
     copyright = "ConTeXt development team",
     mathematics = {
         parameters = {
-            NoLimitSupFactor =   0,
-            NoLimitSubFactor = 900,
-            AccentTopShiftUp =  30,
-         -- AccentBaseHeight =   0,
-            AccentBaseDepth  =  80,
+            NoLimitSupFactor                =    0,
+            NoLimitSubFactor                =  900,
+            AccentTopShiftUp                =   10,
+            FlattenedAccentTopShiftUp       =   10, -- now also set, the wide ones (so we can move in one go)
+            -- AccentExtendMargin              =   50,
+         -- AccentBaseHeight                =    0,
+            AccentBaseDepth                 =   80,
+         -- SpaceAfterScript                =   0,
+         -- SpaceAfterScript                =   30,
+            RadicalDegreeBottomRaisePercent =   60,
+            RadicalKernAfterDegree          = -500,
+            RadicalRuleThickness            =   54, -- 60 in font
+            DelimiterPercent                =   90,
+            DelimiterShortfall              =  400,
+            DisplayOperatorMinHeight        = 1800, -- 1500 in font
+            PrimeRaisePercent               =   75, -- 50 default
+            PrimeRaiseComposedPercent       =   10, -- 25 default
         },
         tweaks = {
             aftercopying = {
@@ -62,57 +81,87 @@ return {
                 {
                     tweak = "dimensions",
                     list  = {      -- offset width italic
-                     -- [0x002C6] = { scale=.85, yoffset = .1, width = .85, height = .935 }, -- hat
-                     -- [0x00302] = { scale=.85, yoffset = .1, width = .85, height = .935 }, -- hat
-                     -- [0x002C6] = { scale=.75, yoffset = .2, advance = .75, width = .75, height = .90 }, -- hat
-                     -- [0x00302] = { scale=.75, yoffset = .2, advance = .75, width = .75, height = .90 }, -- hat
-                        [0x00060] = { yoffset = -0.035 }, -- grave
-                        [0x000B4] = { yoffset = -0.035 }, -- acute
-                        [0x002C6] = { yoffset = -0.035 }, -- hat
-                        [0x002DC] = { yoffset = -0.035 }, -- tilde
-                        [0x000AF] = { yoffset = -0.05 }, -- bar
-                        [0x002D8] = { yoffset = -0.035 }, -- breve
-                        [0x002D9] = { yoffset = -0.035 }, -- dot
-                        [0x000A8] = { yoffset = -0.05 }, -- ddot
-                        [0x020DB] = { yoffset = -0.06 }, -- dddot
-                     -- [0x002DA] = { yoffset = -0.05 }, -- ring
-                     -- [0x002C7] = { yoffset = -0.05 }, -- check
-                        [0x020D7] = { yoffset = -0.05 }, -- vec
-                     -- [0x00300] = { yoffset = -0.07 , all=true }, -- widegrave
-                     -- [0x00301] = { yoffset = -0.07 , all=true }, -- wideacute
-                        [0x00302] = { yoffset = -0.02 , all=true }, -- widehat
-                        [0x00303] = { yoffset = -0.02 , all=true }, -- widetilde
-                        [0x00304] = { yoffset = -0.05 , all=true }, -- widebar
-                        [0x00306] = { yoffset = -0.03 , all=true }, -- widebreve
-                        [0x00307] = { yoffset = -0.03 , all=true }, -- widedot
-                        [0x00308] = { yoffset = -0.03 , all=true }, -- wideddot
-                     -- [0x020DB] = { yoffset =  0.0 , all=true }, -- widedddot
-                     -- [0x0030A] = { yoffset = -0.05 , all=true }, -- widering
-                        [0x0030C] = { yoffset = -0.03 , all=true }, -- widecheck
-                        [0x1D44E] = { 0,     1,    0,   0.9  }, -- a
-                        [0x1D44F] = { 0,     1,    0,   1.3  }, -- b
-                        [0x1D450] = { 0,     1,    0,   0.9  }, -- c
-                        [0x1D451] = { 0,     1,    0,   0.7  }, -- d
-                        [0x1D452] = { 0,     1,    0,   0.9  }, -- e
-                        [0x1D453] = { 0.50,  1.70, 0.6       }, -- f
-                        [0x1D454] = { 0.10,  1.15, 0.2       }, -- g
-                        [0x0210E] = { 0,     1,    0,   1.3  }, -- h
-                        [0x1D458] = { 0,     1,    0,   1.3  }, -- k
-                        [0x1D459] = { 0,     1,    0,   0.9  }, -- l
-                        [0x1D45E] = { 0,     1,    0,   0.9  }, -- q
-                        [0x1D463] = { 0,     1,    0,   1.25 }, -- v
-                        [0x1D464] = { 0,     1,    0,   1.2  }, -- w
-                        [0x1D6FE] = { 0,     1,    0,   1.2  }, -- \gamma
-                        [0x1D706] = { 0,     1,    0,   1.05 }, -- \lambda
-                        [0x1D70A] = { 0,     1,    0,   1.2  }, -- \omicron
-                        [0x1D70D] = { 0,     1,    0,   1.2  }, -- \varsigma
-                        [0x1D70E] = { 0,     1,    0,   1.1  }, -- \sigma
-                        [0x1D70F] = { -.10,  1,    0,   0.95 }, -- \tau
-                        [0x1D712] = { 0.1,   1.2,  0.1       }, -- \chi
-                        [0x1D713] = { -0.05, 0.95, 0.1       }, -- \psi
-                        [0x1D71D] = { 0,     1,    0,   0.7  }, -- \varpi
+                        [0x020D7] = { yoffset = -0.05  }, -- vec
+                        [0x1D44E] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.9  }, -- a
+                        [0x1D44F] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.3  }, -- b
+                        [0x1D450] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.9  }, -- c
+                        [0x1D451] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.7  }, -- d
+                        [0x1D452] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.9  }, -- e
+                        [0x1D453] = { xoffset = 0.50,  width = 1.70, italic = 0.6, anchor = 1.2  }, -- f
+                        [0x1D454] = { xoffset = 0.10,  width = 1.15, italic = 0.2                }, -- g
+                        [0x0210E] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.3  }, -- h
+                        [0x1D458] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.3  }, -- k
+                        [0x1D459] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.9  }, -- l
+                        [0x1D45E] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.9  }, -- q
+                        [0x1D463] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.25 }, -- v
+                        [0x1D464] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.2  }, -- w
+                        [0x1D6FE] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.2  }, -- \gamma
+                        [0x1D706] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.05 }, -- \lambda
+                        [0x1D70A] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.2  }, -- \omicron
+                        [0x1D70D] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.2  }, -- \varsigma
+                        [0x1D70E] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 1.1  }, -- \sigma
+                        [0x1D70F] = { xoffset = -.10,  width = 1,    italic = 0,   anchor = 0.95 }, -- \tau
+                        [0x1D712] = { xoffset = 0.1,   width = 1.2,  italic = 0.1                }, -- \chi
+                        [0x1D713] = { xoffset = -0.05, width = 0.95, italic = 0.1                }, -- \psi
+                        [0x1D71D] = { xoffset = 0,     width = 1,    italic = 0,   anchor = 0.7  }, -- \varpi
                     },
                 },
+
+                -- Accents are a mess. We migrate the extensibles from the combiners to the base accent
+                -- and then need to tweak the width (which is auto set because it was zero with a large
+                -- accent anchor offset). First we copy and fix.
+                {
+                    tweak = "extendaccents",
+                },
+                {
+                    tweak = "fixaccents",
+                },
+                -- First we set the dimensions of the initial accent which started out as zero but we want
+                -- a proper width.
+                {
+                    tweak = "dimensions",
+                    list  = {
+                        [0x00300] = { width = 0.9 }, -- widegrave
+                        [0x00301] = { width = 0.9 }, -- wideacute
+                        [0x00302] = { width = 1.4, anchor = 1.20, xoffset =  .10 }, -- widehat
+                        [0x00303] = { width = 1.4, anchor = 1.20, xoffset =  .10 }, -- widetilde
+                        [0x00306] = { width = 1.4, anchor = 1.20, xoffset =  .10 }, -- widebreve
+                        [0x0030A] = { width = 0.9, xoffset = -.0 }, -- widering
+                        [0x0030C] = { width = 1.4, anchor = 1.20, xoffset = .10 }, -- widecheck
+                    },
+                },
+                -- Then we deal with all offsets and heights in one go. So we treat the initial accent
+                -- as well as the variants here.
+                {
+                    tweak = "dimensions",
+                    list  = {
+                        -- here we want to apply to all
+                        -- [0x00300] = { yoffset = -0.02, height = .95, all = true }, -- widegrave : 0x0060
+                        -- [0x00301] = { yoffset = -0.02, height = .95, all = true }, -- wideacute : 0x00B4
+                        -- [0x00302] = { yoffset = -0.03, height = .95, all = true }, -- widehat   : 0x02C6
+                        -- [0x00303] = { yoffset = -0.02, height = .95, all = true }, -- widetilde : 0x02DC
+                        -- [0x00306] = { yoffset = -0.03, height = .95, all = true }, -- widebre   : 0x02D8
+                        -- [0x0030A] = { yoffset =  0.00, height = .95, all = true }, -- widering  : 0x02DA
+                        -- [0x0030C] = { yoffset = -0.03, height = .95, all = true }, -- widecheck : 0x02C7
+
+                        -- [0x00304] = { yoffset = -0.05, height = .95, all = true }, -- widebar   : 0x00AF
+
+                        -- [0x00307] = { yoffset = -0.03, height = .95, all = true }, -- widedot   : 0x02D9
+                        -- [0x00308] = { yoffset = -0.03, height = .95, all = true }, -- wideddot  : 0x00A8
+                        [0x020DB] = { yoffset =  -0.01,    height = .95, all = true }, -- widedddot : 0x20DB (self)
+                    },
+                },
+                -- We now copy these to the not wide slots so that we can set these to stretch as well,
+                -- if only because it is less confusing and more consistent.
+                {
+                    tweak = "copyaccents",
+                },
+                -- So far for the accents.
+
+                {
+                    tweak = "fixslashes",
+                },
+
                 {
                     tweak = "kerns",
                     list  = {
@@ -122,7 +171,55 @@ return {
                          -- bottomleft  =  0,
                          -- topright    =  0,
                             bottomright = -0.2,
-                       },
+                        },
+                        ["0x7D.parts.top"] = {
+                            topright    = -0.15,
+                        }, -- right brace top
+                        ["0x7D.parts.bottom"] = {
+                            bottomright = -0.15,
+                        }, -- right brace bottom
+                        ["0x7D.variants.*"] = {
+                            topright = -0.15,
+                            bottomright = -0.15,
+                        }, -- right brace variants
+                        ["0x29.parts.top"] = {
+                            topright    = -0.25,
+                        }, -- right parenthesis top
+                        ["0x29.parts.bottom"] = {
+                            bottomright = -0.25,
+                        }, -- right parenthesis bottom
+                        ["0x29.variants.*"] = {
+                            topright = -0.2,
+                            bottomright = -0.2,
+                        }, -- right parenthesis variants
+                        ["0x221A.parts.top"] = {
+                            topright = 0.2,
+                        }, -- right radical top
+                        ["0x221A.parts.bottom"] = {
+                            bottomright = 0.2,
+                        }, -- right radical bottom
+                        ["0x221A.variants.*"] = {
+                            topright = 0.2,
+                            bottomright = 0.2,
+                        }, -- right radical variants
+
+                        -- angle
+                        [0x27E9]              = { topright = -0.2, bottomright = -0.2 },
+                        ["0x27E9.variants.*"] = { topright = -0.3, bottomright = -0.3 },
+                        [0x27EB]              = { topright = -0.2, bottomright = -0.2 },
+                        ["0x27EB.variants.*"] = { topright = -0.3, bottomright = -0.3 },
+
+                        ["0x222B.variants.*"] = integral_variants, ["0x222B.parts.top"] = integral_top, ["0x222B.parts.bottom"] = integral_bottom,
+                        ["0x222C.variants.*"] = integral_variants, ["0x222C.parts.top"] = integral_top, ["0x222C.parts.bottom"] = integral_bottom,
+                        ["0x222D.variants.*"] = integral_variants, ["0x222D.parts.top"] = integral_top, ["0x222D.parts.bottom"] = integral_bottom,
+                        ["0x222E.variants.*"] = integral_variants, ["0x222E.parts.top"] = integral_top, ["0x222E.parts.bottom"] = integral_bottom,
+                        ["0x222F.variants.*"] = integral_variants, ["0x222F.parts.top"] = integral_top, ["0x222F.parts.bottom"] = integral_bottom,
+                        ["0x2230.variants.*"] = integral_variants, ["0x2230.parts.top"] = integral_top, ["0x2230.parts.bottom"] = integral_bottom,
+                        ["0x2231.variants.*"] = integral_variants, ["0x2231.parts.top"] = integral_top, ["0x2231.parts.bottom"] = integral_bottom,
+                        ["0x2232.variants.*"] = integral_variants, ["0x2232.parts.top"] = integral_top, ["0x2232.parts.bottom"] = integral_bottom,
+                        ["0x2233.variants.*"] = integral_variants, ["0x2233.parts.top"] = integral_top, ["0x2233.parts.bottom"] = integral_bottom,
+
+
                     },
                 },
                 {
@@ -139,10 +236,30 @@ return {
                     tweak = "addscripts",
                 },
                 {
+                    tweak = "addprivates",
+                },
+                {
                     tweak = "accentdimensions",
                 },
                 {
                     tweak = "addrules",
+                },
+                {
+                    tweak = "addarrows",
+                },
+                {
+                    tweak   = "addbars",
+                    advance = 0.2,
+                },
+                {
+                    tweak = "addactuarian",
+                },
+                {
+                    tweak = "addequals",
+                },
+                {
+                    tweak = "addfourier",
+                    variant = 1,
                 },
             },
         },

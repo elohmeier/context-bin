@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-Swoosh,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module -- Swoosh Style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -24,9 +24,9 @@
 \startsetups simpleslides:setup:randomizeyes
 \startuseMPgraphic{simpleslides:MP:randomize}
 if condition = 1:
-  qw := qw shifted (-5pt - c*0.1*uniformdeviate(10), 0) ; 
+  qw := qw shifted (-5pt - c*0.1*uniformdeviate(10), 0) ;
 elseif condition = 2:
-  qw := qw shifted (0, c*0.1*uniformdeviate(10)) ; 
+  qw := qw shifted (0, c*0.1*uniformdeviate(10)) ;
 fi ;
 \stopuseMPgraphic
 \stopsetups
@@ -35,9 +35,9 @@ fi ;
 \setuplayout [simpleslides:layout:horizontal][header=3cm,footer=0cm]
 \startuseMPgraphic{simpleslides:MP:counter}
 if NOfPages > 1:
-  numeric prog ; prog = PageNumber/NOfPages - 0.005 ;
+  numeric prog ; prog = RealPageNumber/NOfPages - 0.005 ;
 fi ;
-if PageNumber > 1:
+if RealPageNumber > 1:
   if condition = 1:
     z11 = (prog * PaperWidth, PaperHeight) ;
     z12 = (x11, 0) ;
@@ -64,8 +64,8 @@ pair circcenter ; circcenter = lrcorner Page shifted (-1cm, 1cm) ;
 pair zt, zr, zb, zl ;
 picture pic ;
 b = 1.5cm ;
-if PageNumber > 1:
-	theta = (PageNumber - 1)/(NOfPages - 1) ;
+if RealPageNumber > 1:
+	theta = (RealPageNumber - 1)/(NOfPages - 1) ;
  	p[4] = fullcircle scaled b rotated 90 ;
 	p[4] := p[4] shifted circcenter ;
  	fill p[4] withcolor \MPcolor{simpleslides:altcontrastcolor} ;
@@ -89,7 +89,7 @@ if PageNumber > 1:
  	draw p[3] withcolor \MPcolor{simpleslides:backgroundcolor} ;
  	label(textext("\switchtobodyfont[10pt]\startcolor[simpleslides:backgroundcolor]\pagenumber\stopcolor"),center p[3]) ;
 fi ;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 \stopsetups
 
 \doifsetupselse{simpleslides:setups:\moduleparameter{simpleslides}{counter}}
@@ -106,9 +106,9 @@ fi ;
 \setuplayout [width=fit,
               margin=0cm,
               height=fit,
-              header=3cm, 
-              footer=0.8cm, 
-              topspace=.6cm, 
+              header=3cm,
+              footer=0.8cm,
+              topspace=.6cm,
               backspace=1cm,
               location=singlesided]
 
@@ -139,13 +139,13 @@ fi ;
 \definecolor [simpleslides:contrastcolor]	[r=.4,g=.6,b=.8]
 \definecolor [simpleslides:altcontrastcolor]	[r=.1,g=.1,b=.4]
 \definecolor [simpleslides:itemize:color]       [simpleslides:contrastcolor]
-\definecolor [simpleslides:textcolor]  		[simpleslides:altcontrastcolor] 
+\definecolor [simpleslides:textcolor]  		[simpleslides:altcontrastcolor]
 
 \setupcolors[textcolor=simpleslides:textcolor]
 
 %D We use \METAPOST\ to draw backgrounds.
 
-\startuseMPgraphic{simpleslides:MP:horizontal} 
+\startuseMPgraphic{simpleslides:MP:horizontal}
 StartPage ;
 fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
 numeric c ; c = PaperWidth * 0.4 ;
@@ -170,20 +170,20 @@ qw = z2 .. z3 .. z4 .. z5 .. z6 .. z7 ;
 z9 = ql intersectionpoint qw ;
 z10 = qr intersectionpoint qw ;
 qw := qw cutbefore z9 cutafter z10 ;
-fill qr & qt & ql -- qw -- cycle withcolor \MPcolor{simpleslides:contrastcolor} ; 
+fill qr & qt & ql -- qw -- cycle withcolor \MPcolor{simpleslides:contrastcolor} ;
 draw qw withcolor white ;
 \includeMPgraphic{simpleslides:MP:counter} ;
 StopPage ;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 
-\startuseMPgraphic{simpleslides:MP:vertical} 
+\startuseMPgraphic{simpleslides:MP:vertical}
 StartPage ;
 fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
 numeric c ; c = PaperHeight * 0.4 ;
 numeric d ; d = 2.2cm ;
 numeric e ; e = PaperHeight / 46.9 ;
 if NOfPages > 1:
-  numeric prog ; prog = PageNumber/NOfPages - 0.005 ;
+  numeric prog ; prog = RealPageNumber/NOfPages - 0.005 ;
 fi ;
 numeric condition ; condition = 2 ;
 save ql, qr, qt, qw, qc, qu, qb ; path ql, qr, qt, qw, qc, qu, qb ;
@@ -209,21 +209,21 @@ fill qw -- qr & ql & qu -- cycle withcolor \MPcolor{simpleslides:contrastcolor} 
 draw qw withcolor white ;
 \includeMPgraphic{simpleslides:MP:counter} ;
 StopPage ;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:vertical}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:vertical}]
 
 \defineoverlay
   [simpleslides:background:ornament]
@@ -258,7 +258,7 @@ StopPage ;
    \c!title\c!align=\v!middle,
    \c!author\c!style=,
    \c!author\c!color=simpleslides:altcontrastcolor,
-   \c!author\c!align=\v!middle, 
+   \c!author\c!align=\v!middle,
    \c!date\c!style=,
    \c!date\c!color=simpleslides:altcontrastcolor,
    \c!date\c!align=\v!middle,
@@ -269,22 +269,22 @@ StopPage ;
    \c!after\c!author={\blank[2*line]},
    \c!after\c!date=]
 
-% 
+%
 % %D We want the title to be of a specific height
-% 
+%
 % \setuphead[SlideTitle]
 %    [\c!after=,
 %     \c!alternative=\v!text,
 %     \c!color=white,
 %     \c!command=\doSlideTitle]
-% 
+%
 % \define[2]\doSlideTitle
 %   {\setlayer[simpleslides:layer:slidetitle]%
 %      {\getvalue{simpleslides:framed}[\c!width=\textwidth,\c!height=1.1cm,
 %                 \c!align=\v!right]
-%                {#1#2}}} 
+%                {#1#2}}}
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color=simpleslides:itemize:color]
@@ -293,4 +293,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

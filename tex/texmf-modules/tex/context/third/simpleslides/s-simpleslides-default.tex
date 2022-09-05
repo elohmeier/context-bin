@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-default,
-%D        version=2012.02.12
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module simpleslides --- Default style setup,
 %D         author=Thomas A. Schmitz \& Aditya Mahajan,
@@ -22,13 +22,13 @@
 %D redefine some internal macros to achieve fancier effects.
 
 
-%D We start with the page layout. S6 has the ratio of a usual computer screen.
+%D We start with the page layout. S6 has the 3:4 ratio of a traditional computer screen.
 
 \setuppapersize[S6][S6]
 
 %D We do not want page numbers, but we sometimes want to use the page numbering
 %D mechanism, so we make sure pages are counted, but the numbers are not
-%D displayed. 
+%D displayed.
 
 \setuppagenumbering[location=]
 
@@ -37,11 +37,11 @@
 
 \setuplayout [width=middle,
               margin=0.6cm,
-              height=middle, 
-              header=0.15cm, 
-              footer=1.35cm, 
+              height=middle,
+              header=0.15cm,
+              footer=1.35cm,
 	      footerdistance=0.5cm,
-              topspace=0.5cm, 
+              topspace=0.5cm,
               backspace=1cm,
               location=singlesided]
 
@@ -71,13 +71,13 @@
 \setupcolors[state=start]
 
 %D And colored typesetting for \TEX\ code.
-
+% HR: outdated!
 \definetype[typeTEX][option=color]
 
 %D Presentations have relatively dense lines, we do not care about underfull
 %D lines, but allow emergency stretch.
 
-\setuptolerance[\v!verytolerant,\v!stretch] 
+\setuptolerance[\v!verytolerant,\v!stretch]
 
 %D We use combinations for placing vertical pictures and text side by side, and
 %D we want a distance of 3em between both.
@@ -190,7 +190,7 @@
                      simpleslides:layer:page}]
 \stopsetups
 
-%D We also define some fall backs for presentation backgrounds.
+%D We also define some fallbacks for presentation backgrounds.
 
 \startsetups simpleslides:background:default
   \setups{simpleslides:background:horizontal}
@@ -205,7 +205,7 @@
    \message{I don't know the name of the background you have provided.}
    \setups{simpleslides:background:horizontal}
 \stopsetups
-  
+
 %D Now we move on to specific components of the presentation. The first thing in
 %D any presentation is the title page, so we start with that. We define a macro
 %D that stores values for the title, author and date of the presentation. These
@@ -267,7 +267,7 @@
 %D This parameter can be accessed inside the module as
 %D \type{\simpleslidestitleparameter{institute}}, and the module writer
 %D can redefine \type{\placeTitle} to display the institute at the appropriate
-%D place. 
+%D place.
 
 
 %D Now we setup some default values for the title page. Other modules will
@@ -302,7 +302,7 @@
 %D \tex{SlideTitle}: well, the name says it all. The
 %D argument is typeset as the title, but the implementation and the result
 %D (alignment, size, distance to text, color etc.) vary from module to module,
-%D so this macro is defined in each of the submodules. 
+%D so this macro is defined in each of the submodules.
 
 \definenamespace
   [SlideTitle]
@@ -385,8 +385,8 @@
 %D order to provide a cleaner user interface and to make the code easier to
 %D maintain. We now have just one macro, \tex{IncludePicture}, which
 %D automatically inserts page breaks and adjusts the background and margins, if
-%D necessary. This macro takes four arguments: 
-%D \setup{IncludePicture} 
+%D necessary. This macro takes four arguments:
+%D \setup{IncludePicture}
 %D The first argument decides whether the picture will be place in a horizontal
 %D or vertical arrangement; the second argument is the filename of the picture
 %D you want to include; the third argument does some setup, and the fourth
@@ -441,7 +441,7 @@
 \newconditional\simpleslidesGrid        \setfalse\simpleslidesGrid
 \newconditional\simpleslidesSubGrid     \setfalse\simpleslidesSubGrid
 
-\chardef\simpleslidesHighlightAlternative\zerocount %0=none, 1=circle, 
+\chardef\simpleslidesHighlightAlternative\zerocount %0=none, 1=circle,
                                                     %2=arrow, 3=focus
 \chardef\simpleslidesShadow\zerocount %0=no, 1=topleft, 2=topright,
                                       %3=bottomright, 4=bottomleft
@@ -451,7 +451,7 @@
 
 
 \def\doIncludePicture[#1][#2][#3]#4% dir graphic options text
-  {\begingroup % Else the settings of \setupPicture are global 
+  {\begingroup % Else the settings of \setupPicture are global
    \setupPicture[#3]%
    \processaction
      [\simpleslidesPictureParameter{highlight}]
@@ -505,7 +505,7 @@
           \v!default=>{\doIncludePictureHorizontal[#2]{#4}},
           \v!unknown=>{\doIncludePictureHorizontal[#2]{#4}}%
                        \message{Keywords for positioning pictures are
-                         "horizontal" or "vertical." 
+                         "horizontal" or "vertical."
                           Please specify one of them!}]
      \endgroup}
 
@@ -516,13 +516,13 @@
 %D the available space. Small pictures will be enlarged, big pictures will be
 %D fit. This code was suggested by Wolfgang Schuster on the mailing list.
 
-\def\setPictureDimensionsTo#1#2#3% graphic height width 
+\def\setPictureDimensionsTo#1#2#3% graphic height width
   {\doifelsenothing{\simpleslidesPictureParameter\c!width}
      {\doifelsenothing{\simpleslidesPictureParameter\c!height}
         {\setbox\scratchbox\hbox{\externalfigure[#1]
           [\c!page=\simpleslidesPictureParameter\c!page]}
         % Courtsey Wolfgang Schuster
-        \ifdim\dimexpr#3*100/\wd\scratchbox\relax < 
+        \ifdim\dimexpr#3*100/\wd\scratchbox\relax <
               \dimexpr#2*100/\ht\scratchbox\relax
           %
           \setvalue{simpleslides:picture:width}{#3}%
@@ -536,7 +536,7 @@
  {\setvalue{simpleslides:picture:width}{\simpleslidesPictureParameter\c!width}
   \setvalue{simpleslides:picture:height}{}}}% not \simpleslidesPictureParameter\c!height
 
-%D This macro places the picture centered both vertically and horizontally. 
+%D This macro places the picture centered both vertically and horizontally.
 
 \def\doplacePictureFrame[#1]#2%
   {\framed[\c!frame=\v!off,
@@ -612,11 +612,11 @@
                       \c!width=\paperwidth,
                        \c!page=\simpleslidesPictureParameter\c!page]}%
     \page}% Otherwise last page is not correct in \MKII.
-   
+
 %D Now, we define the main \METAPOST\ graphic to highlight the picture. It first
 %D checks if the user has asked for a grid, and if so, draws a grid and a
 %D subgrid. Then it checks which alternative (arrow, circle, focus) is requested
-%D and draws that. Notice that we have intermixed \TEX\ and \METAPOST, 
+%D and draws that. Notice that we have intermixed \TEX\ and \METAPOST,
 %D exploiting the power of the MP-TEX interaction provided by \CONTEXT.
 
 \startuseMPgraphic{simpleslides:MP:highlight}
@@ -647,25 +647,25 @@
 
   for i = 0 upto 10 :
 
-    draw xaxis shifted (i/10*OverlayWidth, 0) 
-               withpen pencircle scaled (OverlayWidth/250) 
+    draw xaxis shifted (i/10*OverlayWidth, 0)
+               withpen pencircle scaled (OverlayWidth/250)
                withcolor \MPcolor\simpleslidesGridColor ;
 
-    draw yaxis shifted (0,i/10*OverlayHeight) 
-               withpen pencircle scaled (OverlayWidth/250) 
+    draw yaxis shifted (0,i/10*OverlayHeight)
+               withpen pencircle scaled (OverlayWidth/250)
                withcolor \MPcolor\simpleslidesGridColor ;
 
-    label.bot(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]" 
+    label.bot(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]"
                      & decimal i & "\stopcolor"),
               (i/10*OverlayWidth, 0)) ;
-    label.top(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]" 
+    label.top(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]"
                       & decimal i & "\stopcolor"),
               (i/10*OverlayWidth, OverlayHeight)) ;
 
-    label.lft(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]" 
+    label.lft(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]"
                      & decimal i & "\stopcolor"),
               (0, i/10*OverlayHeight)) ;
-    label.rt(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]" 
+    label.rt(textext("\switchtobodyfont[9pt]\startcolor[simpleslides:textcolor]"
                     & decimal i & "\stopcolor"),
               (OverlayWidth, i/10*OverlayHeight)) ;
   endfor ;
@@ -675,7 +675,7 @@
 %D The Metapost graphic draws a fine grid on the picture. The number of grid
 %D lines is controlled by \type{steps} parameter of \type{\setupPicture}. Each
 %D grid box of the 10x10 grid drawn above is subdivided into \type{steps} number
-%D of finer lines. 
+%D of finer lines.
 
 \startuseMPgraphic{simpleslides:MP:highlight:subgrid}
   save xaxis, yaxis ; path xaxis, yaxis ;
@@ -688,13 +688,13 @@
 
   for i = 0 step 10/stepSize until 100 :
     if i mod 10 <> 0 :
-      draw xaxis shifted (i/100*OverlayWidth, 0) 
-                 withpen pencircle scaled (OverlayWidth/500) 
+      draw xaxis shifted (i/100*OverlayWidth, 0)
+                 withpen pencircle scaled (OverlayWidth/500)
                  withcolor \MPcolor\simpleslidesGridColor ;
-      draw yaxis shifted (0,i/100*OverlayHeight) 
-                 withpen pencircle scaled (OverlayWidth/500) 
+      draw yaxis shifted (0,i/100*OverlayHeight)
+                 withpen pencircle scaled (OverlayWidth/500)
                  withcolor \MPcolor\simpleslidesGridColor ;
-    fi 
+    fi
 
   endfor ;
   setbounds currentpicture to OverlayBox ;
@@ -737,19 +737,19 @@
 
 \startuseMPgraphic{simpleslides:MP:highligh:circle}
   save p; path p;
-  p := fullcircle xyscaled 
-        % The dimensions are divided by 5 rather than 10, since the scale 
+  p := fullcircle xyscaled
+        % The dimensions are divided by 5 rather than 10, since the scale
         % measures the radius, rather than the diameter.
         (\simpleslidesCurrentXscale, \simpleslidesCurrentYscale)
-       rotated (\simpleslidesPictureParameter\c!direction) 
+       rotated (\simpleslidesPictureParameter\c!direction)
        shifted
        (\simpleslidesPictureParameter\c!x *OverlayWidth/10,
         \simpleslidesPictureParameter\c!y *OverlayHeight/10)  ;
 
   \ifcase \simpleslidesShadow \else
-  
+
   save shadow_direction ; pair shadow_direction ;
-  shadow_direction =\simpleslidesPictureParameter\c!rulethickness * 
+  shadow_direction =\simpleslidesPictureParameter\c!rulethickness *
      \ifcase \simpleslidesShadow \or
           (-1,1) \or (1,1) \or (1,-1) \or (-1,-1) \fi ;
 
@@ -762,7 +762,7 @@
   \includeMPgraphic{simpleslides:MP:highligh:shadow}
   \fi
 
-  draw p withcolor \MPcolor{\simpleslidesPictureParameter\c!color} 
+  draw p withcolor \MPcolor{\simpleslidesPictureParameter\c!color}
        withpen pencircle scaled (\simpleslidesPictureParameter\c!rulethickness);
 
 \stopuseMPgraphic
@@ -785,9 +785,9 @@
 
   \ifcase \simpleslidesShadow \else
   save shadow_direction ; pair shadow_direction ;
-  shadow_direction = 2*\simpleslidesPictureParameter\c!rulethickness * 
+  shadow_direction = 2*\simpleslidesPictureParameter\c!rulethickness *
      dir(%\simpleslidesPictureParameter{direction} +
-     \ifcase \simpleslidesShadow \or 
+     \ifcase \simpleslidesShadow \or
           135 \or 45 \or -45 \or -135 \fi ) ;
 
   save shadow_thickness ; numeric shadow_thickness ;
@@ -799,7 +799,7 @@
   \fi
 
   drawarrow p
-       withcolor \MPcolor{\simpleslidesPictureParameter\c!color} 
+       withcolor \MPcolor{\simpleslidesPictureParameter\c!color}
        withpen pencircle scaled (2*\simpleslidesPictureParameter\c!rulethickness);
 
 \stopuseMPgraphic
@@ -811,11 +811,11 @@
 
 \startuseMPgraphic{simpleslides:MP:highligh:focus}
   save p; path p;
-  p := fullcircle xyscaled 
-        % The dimensions are divided by 5 rather than 10, since the scale 
+  p := fullcircle xyscaled
+        % The dimensions are divided by 5 rather than 10, since the scale
         % measures the radius, rather than the diameter.
         (\simpleslidesCurrentXscale, \simpleslidesCurrentYscale)
-       rotated (\simpleslidesPictureParameter\c!direction) 
+       rotated (\simpleslidesPictureParameter\c!direction)
        shifted
        (\simpleslidesPictureParameter\c!x *OverlayWidth/10,
         \simpleslidesPictureParameter\c!y *OverlayHeight/10)  ;
@@ -839,25 +839,25 @@
 \startuseMPgraphic{simpleslides:MP:highligh:shadow}
   %% I hope there were a better way to do this.
   for i = 1 upto 20 :
-  shadow_draw p shifted shadow_direction 
+  shadow_draw p shifted shadow_direction
        withcolor transparent (1,
          \simpleslidesPictureParameter{opacity}/10, % 0.1,
-         \MPcolor{\simpleslidesPictureParameter{shadow\c!color}}) 
+         \MPcolor{\simpleslidesPictureParameter{shadow\c!color}})
        withpen pencircle scaled (i*shadow_thickness/20) ;
-  endfor 
+  endfor
 \stopuseMPgraphic
 
 
 %D This is a small square which will be used for itemizations; it will be
-%D placed in the margin. 
+%D placed in the margin.
 
 \startuniqueMPgraphic{simpleslides:itemize:triangle}
-  fill (0,0) -- (0,0.4cm) -- (0.6cm,0.2cm) -- cycle 
+  fill (0,0) -- (0,0.4cm) -- (0.6cm,0.2cm) -- cycle
        withcolor \MPcolor{simpleslides:itemize:color} ;
 \stopuniqueMPgraphic
 
 \startuniqueMPgraphic{simpleslides:itemize:square}
-  fill unitsquare xyscaled(0.4cm,0.4cm) 
+  fill unitsquare xyscaled(0.4cm,0.4cm)
        withcolor \MPcolor{simpleslides:itemize:color} ;
 \stopuniqueMPgraphic
 

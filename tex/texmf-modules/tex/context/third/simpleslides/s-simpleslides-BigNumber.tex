@@ -1,17 +1,17 @@
 %D \module
 %D   [      file=simpleslides-s-BigNumber,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Big Number Style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
-%D           date=\currentdate 
+%D           date=\currentdate
 %D      copyright={Aditya Mahajan and Thomas A. Schmitz}]
 %C
 %C Copyright 2007 Aditya Mahajan and Thomas A. Schmitz
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{BigNumber} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading Big Number style}
 
@@ -26,9 +26,9 @@
               height=fit,
 	      leftmargindistance=.8cm,
 	      rightmargindistance=0cm,
-              header=18mm, 
-              footer=0cm, 
-              topspace=.8cm, 
+              header=18mm,
+              footer=0cm,
+              topspace=.8cm,
               backspace=1.9cm,
               location=singlesided]
 
@@ -40,7 +40,7 @@
     [width=\paperwidth,
     height=\paperheight,x=20mm]
 
-%D Next we a generic frames, which will be used by other macros to
+%D Next we define generic frames, which will be used by other macros to
 %D get a consistent look and feel.
 
 \defineframed[simpleslides:framed:small]
@@ -81,22 +81,8 @@
 
 %D The characteristic feature of this module is that the page number is drawn in
 %D big letters on the slide. First we define the font used to draw the number.
-%D The is a bit verbose since \MKII\ and \MKIV\ have different ways of loading
-%D fonts.
 
-\beginOLDTEX
-\loadmapfile[qhv-ec.map]
-\definefontsynonym  [BigNumberFont] [ec-qhvb] 
-\endOLDTEX
-
-\beginXETEX
-\loadmapfile[qhv-ec.map]
-\definefontsynonym  [BigNumberFont] [ec-qhvb] 
-\endXETEX
-
-\beginLUATEX
 \definefontsynonym  [BigNumberFont] [name:texgyreherosbold]
-\endLUATEX
 
 \definefont         [NumberFont]    [BigNumberFont at 30pt]
 
@@ -124,25 +110,25 @@ StartPage ;
 save Left, Right ;
 picture Left, Right ;
 
-Left  := textext("\NumberFont \color[simpleslides:contrastcolor]{\folio}") ysized 4cm ;
-Right := textext("\NumberFont \color[simpleslides:backgroundcolor]{\folio}") ysized 4cm ;
+Left  := textext("\NumberFont \color[simpleslides:contrastcolor]{\pagenumber}") ysized 4cm ;
+Right := textext("\NumberFont \color[simpleslides:backgroundcolor]{\pagenumber}") ysized 4cm ;
 
 save LeftBox, RightBox ;
 path LeftBox, RightBox ;
 
 save split ; numeric split ;
-split := if PageNumber < 10 : 1/2 else : 3/4 fi  ;
+split := if RealPageNumber < 10 : 1/2 else : 3/4 fi  ;
 %split := 1/2 ;
 
 LeftBox := llcorner Left -- split[llcorner Left, lrcorner Left]
            -- split[ulcorner Left, urcorner Left] -- ulcorner Left --cycle ;
-           
+
 RightBox := lrcorner Right -- split[lrcorner Right, llcorner Right]
            -- split[urcorner Right, ulcorner Right] -- urcorner Right --cycle ;
 
 save shft ; numeric shft ;
 shft = arclength(llcorner Right -- lrcorner Right) ;
-if PageNumber >= 10 :
+if RealPageNumber >= 10 :
   RightBox := RightBox shifted  (shft/2, 0) ;
 fi;
 
@@ -161,14 +147,14 @@ StopPage ;
 \stopuseMPgraphic
 
 %D We also use \METAPOST\ to draw the horizontal and vertical page backgrounds.
-                       
-\startuniqueMPgraphic{simpleslides:MP:horizontal} 
+
+\startuniqueMPgraphic{simpleslides:MP:horizontal}
 StartPage ;
 fill Page withcolor \MPcolor{simpleslides:contrastcolor} ;
 fill Field[Text][Text] enlarged 0.2cm
      withcolor \MPcolor{simpleslides:backgroundcolor} ;
 StopPage ;
-\stopuniqueMPgraphic 
+\stopuniqueMPgraphic
 
 \startuniqueMPgraphic{simpleslides:MP:vertical}
 StartPage ;
@@ -190,21 +176,21 @@ StopPage ;
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:vertical}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:vertical}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D The slide title is placed on the top of the text area. The layer takes care
 %D of the positioning.
@@ -222,7 +208,7 @@ StopPage ;
    \c!date\c!color=simpleslides:textcolor,
    \c!author\c!color=simpleslides:textcolor]
 
-%D Squares are used as the first level of itemizations 
+%D Squares are used as the first level of itemizations
 
 \definesymbol[1][$\square$]
 \setupitemize[1][inmargin]
@@ -232,4 +218,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

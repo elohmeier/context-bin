@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-BottomSquares,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- BottomSquares style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -12,7 +12,7 @@
 
 %D This file provides the \quotation{BottomSquares} style for the presentation
 %D module. It is loaded at runtime. This minimalistic design is inspired by a
-%D presentation Taco gave at EuroTeX 2006. 
+%D presentation Taco gave at EuroTeX 2006.
 
 \writestatus{simpleslides}{loading module BottomSquares}
 
@@ -27,8 +27,8 @@
               margin=0cm,
               height=fit,
 	      margindistance=0cm,
-              header=0cm, 
-              footer=0cm, 
+              header=0cm,
+              footer=0cm,
               topspace=1cm,
 	      bottomspace=2cm,
               backspace=1.5cm,
@@ -51,7 +51,7 @@
 \define\PictureFrameWidth   {.5\textwidth}
 
 % %D We define a generic frame that is used by the slide title.
-% 
+%
 % \defineframed[simpleslides:framed]
 %              [frame=off,offset=0pt,
 %               top=\vss,bottom=\vss]
@@ -68,18 +68,18 @@
 
 %AM: Why not implement this as an interaction bar?
 
-\startuseMPgraphic{simpleslides:MP:ornament} 
+\startuseMPgraphic{simpleslides:MP:ornament}
 StartPage ;
 
 fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
 
-save diff ;numeric diff; 
+save diff ;numeric diff;
 diff = .3cm ;
 
-save w; numeric w; 
+save w; numeric w;
 w = xpart (lrcorner Field[Text][Text] - llcorner Field[Text][Text]) - diff ;
 
-save factor; numeric factor; 
+save factor; numeric factor;
 if NOfPages <= 1 :
   factor = w ;
 else :
@@ -87,30 +87,30 @@ else :
 fi ;
 
 save p; path p ;
-p = unitsquare xyscaled (diff,diff) 
+p = unitsquare xyscaled (diff,diff)
                shifted (xpart llcorner Field[Text][Text],0.85cm) ;
 
 for i = 1 upto NOfPages:
-  if PageNumber = i:
-    fill p xyscaled (0,2) shifted ( (i-1)*factor,-diff-0.85cm) 
+  if RealPageNumber = i:
+    fill p xyscaled (0,2) shifted ( (i-1)*factor,-diff-0.85cm)
          withcolor \MPcolor{simpleslides:contrastcolor} ;
   else :
-    fill p shifted ( (i-1)*factor, 0) 
+    fill p shifted ( (i-1)*factor, 0)
          withcolor \MPcolor{simpleslides:variantcolor} ;
   fi ;
 endfor ;
 StopPage ;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D We want the title information to be colored
 
@@ -162,7 +162,7 @@ fill p[2] withcolor \MPcolor{simpleslides:contrastcolor} ;
 \define[1]\Important%
   {\blank[line]\midaligned{{\framed[height=5cm,width=0.9\textwidth,frame=off,background=VImportant,align=middle,offset=0pt,top=\vss,bottom=\vss,strut=no,foregroundcolor=simpleslides:backgroundcolor]{#1}}}}
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color={simpleslides:itemize:color}]
@@ -171,4 +171,3 @@ fill p[2] withcolor \MPcolor{simpleslides:contrastcolor} ;
 \stopmodule
 
 \endinput
-

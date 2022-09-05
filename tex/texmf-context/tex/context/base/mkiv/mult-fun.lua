@@ -34,6 +34,7 @@ return {
         "getparametertext",
      -- "getparameteroption",
         "applyparameters",
+        "mergeparameters",
         "pushparameters",
         "popparameters",
         "setluaparameter",
@@ -60,6 +61,7 @@ return {
         "zmod",
         "paired", "tripled",
         "unitcircle", "fulldiamond", "unitdiamond", "fullsquare", "unittriangle", "fulltriangle",
+        "unitoctagon", "fulloctagon", "unithexagon", "fullhexagon",
      -- "halfcircle", "quartercircle",
         "llcircle", "lrcircle", "urcircle", "ulcircle",
         "tcircle", "bcircle", "lcircle", "rcircle",
@@ -117,7 +119,8 @@ return {
         "grayscale", "greyscale", "withgray", "withgrey",
         "colorpart", "colorlike",
         "readfile",
-        "clearxy", "unitvector", "center", -- redefined
+        "clearxy", "unitvector",
+        "center", -- redefined
         "epsed", "anchored",
         "originpath", "infinite",
         "break",
@@ -171,7 +174,7 @@ return {
         "passvariable", "passarrayvariable", "tostring", "topair", "format", "formatted", "quotation", "quote",
         "startpassingvariable", "stoppassingvariable",
         --
-        "eofill", "eoclip", "nofill", "dofill", "fillup", "eofillup", "nodraw", "dodraw",
+        "eofill", "eoclip", "nofill", "dofill", "fillup", "eofillup", "nodraw", "dodraw", "enfill",
         "area",
         --
         "addbackground",
@@ -232,5 +235,9 @@ return {
         "processpath", "pencilled",
         "sortedintersectiontimes", "intersectionpath", "firstintersectionpath", "secondintersectionpath",
         "intersectionsfound", "cutbeforefirst", "cutafterfirst",  "cutbeforelast", "cutafterlast",
+        --
+        "xnormalized", "ynormalized", "xynormalized",
+        "phantom",
+        "scrutinized",
     },
 }

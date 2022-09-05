@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-Shaded,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Shaded style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -11,7 +11,7 @@
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{Shaded} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading Shaded style}
 
@@ -25,10 +25,10 @@
               margin=1.5cm,
               leftmargindistance=0pt,
               rightmargindistance=0pt,
-              height=fit, 
-              header=0pt, 
-              footer=0pt, 
-              topspace=.8cm, 
+              height=fit,
+              header=0pt,
+              footer=0pt,
+              topspace=.8cm,
               backspace=1.5cm,
               bottomspace=1cm,
               bottom=1cm,
@@ -86,7 +86,7 @@
 \startuseMPgraphic{simpleslides:MP:ornament}
 StartPage ;
 save p ; path p[] ;
-save a ; 
+save a ;
 if NOfPages <= 15:
        a = 0.7cm ;
 elseif NOfPages <= 30:
@@ -99,10 +99,10 @@ factor = (TextWidth - a)/(NOfPages - 1) ;
 linear_shade(Page, 6,
               \MPcolor{simpleslides:backgroundcolor},
               \MPcolor{simpleslides:variantcolor}) ;
-if PageNumber >1:
+if RealPageNumber >1:
        for i = 1 upto NOfPages :
                p[i] = unitcircle scaled a shifted (BackSpace + (i-1)*factor, (2cm - a)/2) ;
-               if i = PageNumber :
+               if i = RealPageNumber :
 %                      p[i] := p[i] zscaled (1.2,1.5) ;
                        pickup pencircle scaled 5pt ;
                        drawfill p[i] withcolor \MPcolor{simpleslides:variantcolor} ;
@@ -121,26 +121,26 @@ StopPage ;
   [simpleslides:background:ornament]
   [\useMPgraphic{simpleslides:MP:ornament}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color={simpleslides:itemize:color}]
- 
+
 % %D The \quotation{Shaded} style uses \CONTEXT's interactionbar:
-% 
+%
 % \setupsubpagenumber[way=bytext,state=start]
-% 
+%
 % \setupinteraction
 %   [page=yes,
 %    color=simpleslides:interactioncolor,
 %    contrastcolor=simpleslides:contrastcolor,
 %    menu=on,
 %    state=start]
-% 
+%
 % %\setupinteractionbar
 % %\startinteractionmenu[bottom]
 % \setupbottomtexts[XXX{\interactionbar[state=start,alternative=e,width=8cm,height=0.2cm,step=small,frame=on]}YYY]
@@ -152,4 +152,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

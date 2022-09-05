@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-ThickStripes,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Thick Stripes style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -28,10 +28,10 @@
 	      rightmargin=0cm,
               leftmargindistance=.9cm,
               rightmargindistance=0pt,
-              height=fit, 
-              header=2.5cm, 
-              footer=0cm, 
-              topspace=.4cm, 
+              height=fit,
+              header=2.5cm,
+              footer=0cm,
+              topspace=.4cm,
               backspace=2.9cm,
 	      cutspace=2.8cm,
               bottomspace=0cm,
@@ -98,7 +98,7 @@ fill p[3] withcolor \MPcolor{simpleslides:variantcolor} ;
 pickup pencircle scaled 5pt ;
 
 if NOfPages > 1:
-	theta = (PageNumber - 1)/(NOfPages - 1) ;
+	theta = (RealPageNumber - 1)/(NOfPages - 1) ;
 	p[4] = unitcircle scaled b rotated 90 shifted (b + ((a-b)/2),(a-b)/2) ;
 	fill p[4] withcolor \MPcolor{simpleslides:backgroundcolor} ;
 	t[0] = center p[4] ;
@@ -117,11 +117,11 @@ StopPage ;
   [simpleslides:background:ornament]
   [\useMPgraphic{simpleslides:MP:ornament}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
-%D We want the title to placed in color. 
+%D We want the title to placed in color.
 
 \setupTitle[\c!headcolor={simpleslides:contrastcolor}]
 
@@ -134,7 +134,7 @@ StopPage ;
     \c!height=2.5cm,
     \c!color=simpleslides:backgroundcolor]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:triangle}]
 \setupitemize[1][inmargin][color=simpleslides:backgroundcolor]
@@ -143,4 +143,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

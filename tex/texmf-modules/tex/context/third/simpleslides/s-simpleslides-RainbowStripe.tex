@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-t-RainbowStripe,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module RainbowStripe,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -11,7 +11,7 @@
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{RainbowStripe} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading RainbowStripe style}
 
@@ -24,9 +24,9 @@
 \setuplayout [width=fit,
               margin=1.5cm,
               height=fit,
-              header=11mm, 
-              footer=0cm, 
-              topspace=15mm, 
+              header=11mm,
+              footer=0cm,
+              topspace=15mm,
               backspace=2cm,
               location=singlesided]
 
@@ -69,7 +69,7 @@
 
 %\setupexternalfigures[location={global}]
 
-%\defineoverlay[rainb][{\externalfigure[rainbow.pdf][width=1.05\textwidth,height=1.4\textheight]}] 
+%\defineoverlay[rainb][{\externalfigure[rainbow.pdf][width=1.05\textwidth,height=1.4\textheight]}]
 
 % \startuniqueMPgraphic{gray}
 % StartPage ;
@@ -169,11 +169,11 @@ StopPage ;
 StartPage
 path p[] ;
 p[1] := unitsquare xyscaled(MakeupWidth,.4cm) shifted (2cm,0.7cm) ;
-numeric i; 
+numeric i;
 if NOfPages <= 1 :
-  i = (PageNumber - 1) ;
+  i = (RealPageNumber - 1) ;
 else :
-  i = (PageNumber - 1)/(NOfPages - 1) ;
+  i = (RealPageNumber - 1)/(NOfPages - 1) ;
 fi ;
 p[2] = ulcorner p[1] -- urcorner p[1] ;
 p[3] = llcorner p[1] -- lrcorner p[1] ;
@@ -189,21 +189,21 @@ StopPage
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D We set up our SlideTitles:
 
@@ -214,7 +214,7 @@ StopPage
     \c!align=\v!center,
     \c!height=1.5cm]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][inmargin]
@@ -223,4 +223,3 @@ StopPage
 \stopmodule
 
 \endinput
-

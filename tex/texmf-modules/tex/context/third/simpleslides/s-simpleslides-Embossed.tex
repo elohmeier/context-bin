@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s--Embossed,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Embossed style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -11,7 +11,7 @@
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{embossed} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading module embossed}
 
@@ -23,9 +23,9 @@
 \setuplayout [width=fit,
               margin=1.3cm,
               height=fit,
-              header=1cm, 
-              footer=1cm, 
-              topspace=10mm, 
+              header=1cm,
+              footer=1cm,
+              topspace=10mm,
               backspace=2cm,
               location=singlesided]
 
@@ -69,25 +69,14 @@
 %D This module write "Made with ConTeXt" in bold at the bottom. We first define
 %D a font for it.
 
-\beginOLDTEX
-\loadmapfile[qhv-ec.map]
-\definefontsynonym [Embossed] [ec-qhvb] 
-\endOLDTEX
-
-\beginXETEX
-\loadmapfile[qhv-ec.map]
-\definefontsynonym [Embossed] [ec-qhvb] 
-\endXETEX
-
-\beginLUATEX
 \definefontsynonym [Embossed] [name:texgyreherosbold]
-\endLUATEX
 
 \definefont[EmblemFont] [Embossed at 30pt]
 
-%D The emblem string is configurable.
+%D Some strings are configurable.
 
-\setuplabeltext [\s!en]    [simpleslidesemblem={Made with \CONTEXT}]
+\setuplabeltext [\s!en]    [simpleslidesemblem={Made with \CONTEXT},of=of]
+\setuplabeltext [\s!de]    [simpleslidesemblem={Gesetzt mit \CONTEXT},of=von]
 
 \definetextext[simpleslides:sometxt:left] {\TaspresentSometxtLeft}
 \definetextext[simpleslides:sometxt:right]{\TaspresentSometxtRight}
@@ -118,17 +107,17 @@ bottom = llcorner Page -- z1 -- z2 -- lrcorner Page -- cycle ;
 fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
 fill bottom withcolor \MPcolor{simpleslides:variantcolor} ;
 
-draw Page withcolor \MPcolor{simpleslides:framecolor} 
+draw Page withcolor \MPcolor{simpleslides:framecolor}
           withpen pencircle scaled 12pt ;
 draw topboundary bottom withcolor \MPcolor{simpleslides:framecolor}
           withpen pencircle scaled 6pt ;
 
 
-draw \sometxt[simpleslides:sometxt:left]{\labeltext{simpleslidesemblem} \hfill \pagenumber\ of \lastpage} 
+draw \sometxt[simpleslides:sometxt:left]{\labeltext{simpleslidesemblem} \hfill \pagenumber\ \labeltext{of} \lastpage}
       shifted (1.96cm,0.04cm) ;
 
-draw \sometxt[simpleslides:sometxt:right]{\labeltext{simpleslidesemblem} \hfill \pagenumber\ of \lastpage} 
-      shifted (2cm,0) ; 
+draw \sometxt[simpleslides:sometxt:right]{\labeltext{simpleslidesemblem} \hfill \pagenumber\ \labeltext{of} \lastpage}
+      shifted (2cm,0) ;
 
 StopPage ;
 \stopuseMPgraphic
@@ -160,7 +149,7 @@ StopPage ;
    \c!align=\v!middle]
 
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color={simpleslides:itemize:color}]
@@ -169,4 +158,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

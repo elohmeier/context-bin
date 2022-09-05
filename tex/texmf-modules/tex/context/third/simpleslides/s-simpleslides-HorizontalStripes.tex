@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-HorizontalStripes,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module HorizontalStripes,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -26,15 +26,20 @@
 \setuplayout [width=fit,
               margin=0cm,
               height=fit,
-              header=2.73cm, 
-              footer=0.9cm, 
-              topspace=0cm, 
+              header=2.73cm,
+              footer=0.9cm,
+              topspace=0cm,
               backspace=1cm,
               location=singlesided]
 
 \setuplayout [simpleslides:layout:horizontal][header=2.73cm]
 \setuplayout [simpleslides:layout:vertical]  [header=0.75cm]
 \setuplayout [simpleslides:layout:title]     [header=0cm]
+
+%D Some strings are configurable.
+
+\setuplabeltext [\s!en]    [of=of]
+\setuplabeltext [\s!de]    [of=von]
 
 %D In this style, we don't want the ornament background for vertical slides:
 
@@ -91,8 +96,8 @@
 
 %D We let Metapost calculate the background:
 
-\startuseMPgraphic{simpleslides:MP:common} 
-save a ; numeric a ; 
+\startuseMPgraphic{simpleslides:MP:common}
+save a ; numeric a ;
 a = 1.5mm ;
 
 save p; path p[] ;
@@ -111,7 +116,7 @@ p[4] = p[3] shifted (0,.75cm) ;
 fill p[1] withcolor \MPcolor{simpleslides:framecolor} ;
 fill p[3] withcolor \MPcolor{simpleslides:framecolor} ;
 fill p[4] withcolor \MPcolor{simpleslides:framecolor} ;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 
 \startuniqueMPgraphic{simpleslides:MP:vertical}
 StartPage ;
@@ -130,17 +135,17 @@ StopPage ;
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-   [simpleslides:background:horizontal] 
-   [\useMPgraphic{simpleslides:MP:horizontal}] 
- 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:vertical}] 
+\defineoverlay
+   [simpleslides:background:horizontal]
+   [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:vertical}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:vertical}]
+
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:vertical}]
 
 %D We define the footer
 
@@ -152,7 +157,7 @@ StopPage ;
                            \c!height=0.65cm,
                            \c!width=\textwidth]
                            {\simpleslidestitleparameter{title}
-                            \hfill \pagenumber\ of \lastpage}}]
+                            \hfill \pagenumber\ \labeltext{of} \lastpage}}]
 
 
 %D this sets up the title page:
@@ -172,7 +177,7 @@ StopPage ;
    \c!height=2.2cm,
    \c!after=]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color={simpleslides:itemize:color}]
@@ -181,4 +186,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

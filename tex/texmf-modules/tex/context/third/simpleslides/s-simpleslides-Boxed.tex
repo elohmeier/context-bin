@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-Boxed,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Boxed Style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -12,7 +12,7 @@
 
 %D This file provides the \quotation{Boxed} style for the presentation
 %D module. It is loaded at runtime. The look of this style was inspired by the
-%D screen version of the Metafun manual. 
+%D screen version of the Metafun manual.
 
 \writestatus{simpleslides}{loading style Boxed}
 
@@ -27,9 +27,9 @@
               height=fit,
 	      leftmargindistance=1cm,
 	      rightmargindistance=0cm,
-              header=2.8cm, 
-              footer=1cm, 
-              topspace=.7cm, 
+              header=2.8cm,
+              footer=1cm,
+              topspace=.7cm,
               backspace=2cm,
               location=singlesided]
 
@@ -60,7 +60,7 @@
 
 %D We let Metapost calculate the background:
 
-\startuniqueMPgraphic{simpleslides:MP:horizontal} 
+\startuniqueMPgraphic{simpleslides:MP:horizontal}
 StartPage ;
 
 save p; path p[] ;
@@ -95,13 +95,13 @@ draw z7 -- z4 withcolor \MPcolor{simpleslides:contrastcolor} ;
 draw z8 -- z3 withcolor \MPcolor{simpleslides:contrastcolor} ;
 
 StopPage ;
-\stopuniqueMPgraphic 
+\stopuniqueMPgraphic
 
 \startuseMPgraphic{simpleslides:MP:ornament}
 StartPage
 
 save a; numeric a;
-a := 1.5cm ;   
+a := 1.5cm ;
 
 save factor, allpages, shift ;
 numeric factor, allpages, shift ;
@@ -116,8 +116,8 @@ save p ;path p ;
 p := fullcircle scaled 4mm shifted (a + shift/2, a/2) ;
 
 for i = 1 upto allpages/factor :
-  fill p shifted ( (i-1)*shift, 0) 
-    if i - 1 = floor ((PageNumber - 1)/factor) :
+  fill p shifted ( (i-1)*shift, 0)
+    if i - 1 = floor ((RealPageNumber - 1)/factor) :
       withcolor \MPcolor{simpleslides:variantcolor} ;
     else :
       withcolor \MPcolor{simpleslides:backgroundcolor} ;
@@ -130,21 +130,21 @@ StopPage
 
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D The title page:
 
@@ -161,7 +161,7 @@ StopPage
    \c!height=2.3cm,
    \c!after=]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][inmargin][color={simpleslides:itemize:color}]
@@ -170,4 +170,3 @@ StopPage
 \stopmodule
 
 \endinput
-

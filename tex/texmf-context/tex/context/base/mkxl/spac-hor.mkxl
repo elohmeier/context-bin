@@ -1034,8 +1034,8 @@
 \definehspace [\v!default] [\spaceamount]
 \definehspace [\v!none]    [\zeropoint]
 
-%D Taken from Taco's math module (cq. \AMS\ macros), but
-%D adapted to \type {\hspace}:
+%D Taken from Taco's math module (cq. \AMS\ macros), but %D adapted to \type
+%D {\hspace}:
 
 \permanent\protected\def\textormathspace         #1#2#3{\ifmmode\mskip#1#2\else\kern #1\hspaceamount\empty{#3}\fi\relax}
 \permanent\protected\def\textormathspacecommand  #1#2#3{\ifmmode\mskip#1#2\else#3\fi\relax}
@@ -1267,5 +1267,14 @@
 
 \permanent\def\mplocation#1{\ifcsname\??mplocation#1\endcsname\lastnamedcs\else0\fi}
 %permanent\def\mplocation#1{\csname\??mplocation\ifcsname\??mplocation#1\endcsname#1\else\v!left\fi\endcsname}
+
+% new: \lateindent \lateundent
+
+% \parinitleftskip1cm \parindent 1cm \indent test \par
+% \parinitleftskip1cm \parindent 1cm \undent test \par
+% \parinitleftskip1cm \parindent 1cm \indent \undent test \par
+% \parinitleftskip1cm \parindent 1cm \indent \strut \undent test \par
+% \parinitleftskip1cm \parindent 1cm \strut \lateindent 2cm test \par
+% \parinitleftskip1cm \parindent 1cm \strut \lateindent 2cm test \lateundent \par
 
 \protect \endinput

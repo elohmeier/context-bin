@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-Framed,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- Framed Style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -11,7 +11,7 @@
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{Framed} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading style Framed}
 
@@ -23,11 +23,11 @@
 
 \setuplayout [width=fit,
               margin=0.6cm,
-              height=fit, 
-              header=2.1cm, 
-              footer=1.35cm, 
+              height=fit,
+              header=2.1cm,
+              footer=1.35cm,
 	      footerdistance=0.5cm,
-              topspace=0.5cm, 
+              topspace=0.5cm,
               backspace=1cm,
               location=singlesided]
 
@@ -60,7 +60,7 @@
 %D ornaments, square or stripes. We define both, and then choose one depending
 %D on the user's choice.
 
-\startuseMPgraphic{simpleslides:MP:ornament:square} 
+\startuseMPgraphic{simpleslides:MP:ornament:square}
 StartPage;
 
 save a,b,c,p;
@@ -77,15 +77,15 @@ endfor ;
 
 if NOfPages >= 12:
   save n ; numeric n ;
-  n := (10*(PageNumber - 1) div (NOfPages - 1)) + 1;
+  n := (10*(RealPageNumber - 1) div (NOfPages - 1)) + 1;
 
-  draw llcorner p[n] -- urcorner p[n] 
-         withpen pencircle scaled 2pt 
+  draw llcorner p[n] -- urcorner p[n]
+         withpen pencircle scaled 2pt
          withcolor \MPcolor{simpleslides:backgroundcolor} ;
 fi ;
 
 StopPage;
-\stopuseMPgraphic 
+\stopuseMPgraphic
 
 \startuseMPgraphic{simpleslides:MP:ornament:stripe}
 StartPage;
@@ -100,11 +100,11 @@ linear_shade(p[1],0,
             \MPcolor{simpleslides:contrastcolor}) ;
 
 save i ;
-numeric i; 
-if NOfPages = 0 : 
-  i = PageNumber ;
-else : 
-  i = PageNumber/NOfPages ;
+numeric i;
+if NOfPages = 0 :
+  i = RealPageNumber ;
+else :
+  i = RealPageNumber/NOfPages ;
 fi ;
 
 p[2] = ulcorner p[1] -- urcorner p[1] ;
@@ -123,56 +123,56 @@ clip currentpicture to p[4] ;
 StopPage;
 \stopuseMPgraphic
 
-\startuniqueMPgraphic{simpleslides:MP:vertical} 
+\startuniqueMPgraphic{simpleslides:MP:vertical}
 StartPage ;
 
-fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ; 
+fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
 
-draw Page enlarged (-.2cm) 
-          withpen pencircle scaled 4pt 
-          withcolor \MPcolor{simpleslides:framecolor} ; 
-
-draw unitsquare 
-     xyscaled(0.448*PaperWidth,0.815*PaperHeight) 
-     shifted (0.528*PaperWidth, 0.15*PaperHeight)
-     withpen pencircle scaled 2pt 
-     withcolor \MPcolor{simpleslides:framecolor} ; 
-
-StopPage ;
-\stopuniqueMPgraphic 
-
-\startuniqueMPgraphic{simpleslides:MP:horizontal} 
-StartPage ;
-
-fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ; 
-
-draw Page enlarged (-.2cm) 
-          withpen pencircle scaled 4pt 
-          withcolor \MPcolor{simpleslides:framecolor} ; 
+draw Page enlarged (-.2cm)
+          withpen pencircle scaled 4pt
+          withcolor \MPcolor{simpleslides:framecolor} ;
 
 draw unitsquare
-     xyscaled(0.95*PaperWidth,0.7*PaperHeight) 
+     xyscaled(0.448*PaperWidth,0.815*PaperHeight)
+     shifted (0.528*PaperWidth, 0.15*PaperHeight)
+     withpen pencircle scaled 2pt
+     withcolor \MPcolor{simpleslides:framecolor} ;
+
+StopPage ;
+\stopuniqueMPgraphic
+
+\startuniqueMPgraphic{simpleslides:MP:horizontal}
+StartPage ;
+
+fill Page withcolor \MPcolor{simpleslides:backgroundcolor} ;
+
+draw Page enlarged (-.2cm)
+          withpen pencircle scaled 4pt
+          withcolor \MPcolor{simpleslides:framecolor} ;
+
+draw unitsquare
+     xyscaled(0.95*PaperWidth,0.7*PaperHeight)
      shifted (0.025*PaperWidth, 0.15*PaperHeight)
-     withpen pencircle scaled 2pt 
-     withcolor \MPcolor{simpleslides:framecolor} ; 
+     withpen pencircle scaled 2pt
+     withcolor \MPcolor{simpleslides:framecolor} ;
 
 StopPage;
-\stopuniqueMPgraphic 
+\stopuniqueMPgraphic
 
 %D We define these backgrounds as overlays:
 
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:vertical}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:vertical}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
 %D We define the ornament according to user's choice.
 
@@ -216,7 +216,7 @@ StopPage;
    \c!height=2.1cm,
    \c!after=]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][color={simpleslides:itemize:color}]
@@ -225,4 +225,3 @@ StopPage;
 \stopmodule
 
 \endinput
-

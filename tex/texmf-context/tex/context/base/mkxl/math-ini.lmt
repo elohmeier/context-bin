@@ -6,19 +6,23 @@ if not modules then modules = { } end modules ['math-ini'] = {
     license   = "see context related readme files"
 }
 
--- if needed we can use the info here to set up xetex definition files
--- the "8000 hackery influences direct characters (utf) as indirect \char's
---
--- isn't characters.data loaded already ... shortcut it here
---
--- replace code 7 by 0 as we don't use it anyway (chars with code 7 will adapt to
--- to the fam when set ... we use other means .. ok, we could use it for spacing but
--- then we also have to set the other characters (only a subset done now)
+-- The way we do math in \CONTEXT\ \MKIV\ differs from other macro packages so you
+-- should not mix the somewhat unique (and bit weird) approach here with the more
+-- traditional (\TEX) approach. Also, we use char-def.lua as starting point and that
+-- file is quite \CONTEXT\ specific. When we added math to that there was no
+-- interest (quite the contrary) so we didn't went generic there which in retrospect
+-- also gives us the freedom to add more information, something that happens
+-- occasionally. Because that file is shared between \MKIV\ and \LMTX\ some
+-- information is only used by \LMTX. We also have quite some runs over the math
+-- list but that has been so since we started and performance will not degrade much
+-- by it; after all math is not that demanding. More details can be found in the
+-- manuals that discuss math. Most code (and concepts) date from 2005 so maybe I
+-- will upgrade the lot some day, although it has been adapted on the way to the
+-- changes in the engine(s).
 
 local next, type = next, type
-local formatters, find = string.formatters, string.find
-local utfchar, utfbyte, utflength = utf.char, utf.byte, utf.length
------ floor = math.floor
+local formatters, find, nospaces = string.formatters, string.find, string.nospaces
+local utfchar, utfbyte = utf.char, utf.byte
 local sortedhash = table.sortedhash
 local toboolean = toboolean
 
@@ -30,8 +34,6 @@ local ctx_sprint            = context.sprint
 local ctx_doifelsesomething = commands.doifelsesomething
 
 local trace_defining        = false  trackers.register("math.defining", function(v) trace_defining = v end)
-
-trace_defining = true
 
 local report_math           = logs.reporter("mathematics","initializing")
 
@@ -48,10 +50,237 @@ local chardata              = characters.data
 local texsetattribute       = tex.setattribute
 local setmathcode           = tex.setmathcode
 local setdelcode            = tex.setdelcode
+local texintegerdef         = tex.integerdef
+
+setdelcode = function() end
+
+-- This is relatively new and experimental:
+
+do
+
+    local dictionaries       = mathematics.dictionaries or { }
+    mathematics.dictionaries = dictionaries
+
+    local names    = dictionaries.names    or utilities.storage.allocate()
+    local groups   = dictionaries.groups   or utilities.storage.allocate()
+    local data     = dictionaries.data     or utilities.storage.allocate()
+    local sets     = dictionaries.sets     or utilities.storage.allocate()
+    local variants = dictionaries.variants or utilities.storage.allocate() -- todo: get from char-def
+    local defaults = dictionaries.defaults or utilities.storage.allocate() -- todo: get from char-def
+
+    storage.register("mathematics/dictionaries/names",    names,    "mathematics.dictionaries.names")
+    storage.register("mathematics/dictionaries/groups",   groups,   "mathematics.dictionaries.groups")
+    storage.register("mathematics/dictionaries/data",     data,     "mathematics.dictionaries.data")
+    storage.register("mathematics/dictionaries/sets",     sets,     "mathematics.dictionaries.sets")
+    storage.register("mathematics/dictionaries/variants", variants, "mathematics.dictionaries.variants")
+    storage.register("mathematics/dictionaries/defaults", defaults, "mathematics.dictionaries.defaults")
+
+    dictionaries.names    = dictionaries.names    or names
+    dictionaries.groups   = dictionaries.groups   or groups
+    dictionaries.data     = dictionaries.data     or data
+    dictionaries.sets     = dictionaries.sets     or sets
+    dictionaries.variants = dictionaries.variants or variants
+    dictionaries.defaults = dictionaries.defaults or defaults
+
+    if not sets.n then
+        sets.n = 0
+    end
+
+    function dictionaries.registergroup(name)
+        local group = rawget(names,name)
+        if not group then
+            group = #groups + 1
+            names[name]   = group
+            names[group]  = group
+            groups[group] = name
+            data[group]   = { }
+            local csname  = "math" .. nospaces(name) .. "dictionary"
+            texintegerdef(csname,group,"immutable")
+        end
+        return group
+    end
+
+    function dictionaries.registergroupset(name,set)
+        local s = sets[name]
+        if not s then
+            local d = dictionaries.registergroup(name)
+            local n = sets.n + 1
+            local l = utilities.parsers.settings_to_array(set)
+            local g = { }
+            for i=1,#l do
+                local n = names[l[i]]
+                if n then
+                    g[#g+1] = n -- ordered
+                end
+            end
+            s = {
+                names  = l,
+                groups = g,
+                group  = d,
+            }
+            sets[name] = s
+            sets[d]    = s
+
+        end
+    end
+
+    function dictionaries.groupset(name)
+        return sets[name] or { }
+    end
+
+    function dictionaries.groupsetgroup(name)
+        local s = sets[name]
+        if s then
+            return s.group
+        else
+            return names[name] or 0
+        end
+    end
+
+    function dictionaries.registercharacter(group,index,description,class)
+        local d = names[group] -- can be number or string
+        if d then
+            data[d][index] = description or true
+            local v = variants[index]
+            if not class then
+                class = true
+            end
+            if v then
+                v[d] = class
+            else
+                variants[index] = { [d] = class}
+            end
+            if not defaults[index] then
+                defaults[index] = d
+            end
+        end
+    end
+
+    implement {
+        name      = "registergroupset",
+        arguments = "2 strings",
+        actions   = dictionaries.registergroupset,
+    }
+
+    implement {
+        name      = "groupsetgroup",
+        arguments = "string",
+        actions   = { dictionaries.groupsetgroup, context },
+    }
+
+    local fontchardata = fonts.hashes.characters
+    local f_dictionary = false
+    local register     = callback.register
+    local whatdetail   = "all"
+
+    local function trace(n,properties,group,index,font,char)
+     -- local properties, group, index, font, char = nodes.nuts.getchardict(nodes.nuts.tonut(n))
+        if properties ~= 0 or group ~= 0 or index ~= 0 then
+            local char = fontchardata[font][char]
+            if char or whatdetail == "all" then
+                local unicode = char and char.unicode
+                if unicode then
+                    local groupname = groups[group]
+                    local indexname = false
+                    if groupname then
+                        indexname = data[group][index] -- dictionaries.data
+                    else
+                        groupname = "unknown"
+                    end
+                    if not indexname or indexname == true then
+                        indexname = chardata[unicode]
+                        indexname = indexname and indexname.description or "unknown"
+                    end
+                    if not f_dictionary then
+                        f_dictionary = formatters["properties [%04X:%04X:%04X] [%s] %U : %s"]
+                    end
+                    return f_dictionary(properties,group,index,groupname,unicode,indexname)
+                end
+            end
+        end
+    end
+
+    trackers.register("math.dictionaries",function(v)
+        whatdetail = v
+        if whatdetail then
+            register("get_math_dictionary",trace)
+        else
+            register("get_math_dictionary")
+        end
+    end)
+
+    register("get_math_dictionary",trace)
+
+    -- This is experimental and a prelude to the long pending "relate math rendering to
+    -- some field" wish. In TeX characters and symbols are grouped by class but that is
+    -- mostly related to spacing etc. while we actually want to group by meaning. A
+    -- reasonable but incomplete starting point is:
+    --
+    -- https://www.w3.org/TR/MathML3/appendixa.html#parsing_DefEncAtt
+    --
+    -- But it has some weird short names mixed with long ones (and a strange suddenly
+    -- uppercase: Differential-Operator) but we are not bound to that at all. We will
+    -- probably remove and add categories anyway. This openmath stuff looks a bit
+    -- abandoned but we can use it as a start and playground anyway.
+    --
+    -- The char-def.lua file will have mathgroup entries reflecting this.
+    --
+    -- This is a good one (with nice roll-overs too):
+    --
+    -- https://en.wikipedia.org/wiki/List_of_mathematical_symbols_by_subject
+
+    if environment.initex then
+
+        local registergroup = mathematics.dictionaries.registergroup
+
+        registergroup("default")
+        registergroup("binary arithmetic")
+        registergroup("binary linear algebra")
+        registergroup("binary logical")
+        registergroup("binary relation")
+        registergroup("binary set")
+        registergroup("constant arithmetic")
+        registergroup("constant set")
+        registergroup("differential")
+        registergroup("integral")
+        registergroup("interval")
+        registergroup("lambda")
+        registergroup("limit")
+        registergroup("nary arithmetic")
+        registergroup("nary constructor")
+        registergroup("nary functional")
+        registergroup("nary linear algebra")
+        registergroup("nary logical")
+        registergroup("nary minmax")
+        registergroup("nary relation")
+        registergroup("nary set list")
+        registergroup("nary set relation")
+        registergroup("nary set")
+        registergroup("nary statistics")
+        registergroup("partial") -- partial differential
+        registergroup("product")
+        registergroup("quantifier")
+        registergroup("unary arithmetic")
+        registergroup("unary elementary")
+        registergroup("unary functional")
+        registergroup("unary linear algebra")
+        registergroup("unary logical")
+        registergroup("unary set")
+        registergroup("unary vector")
+
+    end
+
+    -- \Umathdictdef\vdash 1 \mathbinarylogicaldictionary "22A2 \mathrelationcode 0 "22A2
+    --
+    -- \startluacode
+    --     mathematics.dictionaries.registercharacter("binary logical",0x22A2,"implies")
+    -- \stopluacode
+
+end
 
 -- These are different from mkiv with luatex.
 
-local classes          = allocate { }
+local classes          = allocate { unset = 64 } -- or -1
 local classnames       = allocate { }
 local maxengineclass   = 63
 local lastengineclass  = 0
@@ -121,26 +350,39 @@ local function registerengineclass(name,short)
     return class
 end
 
-registerengineclass("explicit",    "expl")
-registerengineclass("imaginary",   "img")
-registerengineclass("differential","dif")
-registerengineclass("exponential", "exp")
-registerengineclass("function",    "fnc")
-registerengineclass("digit",       "dig")
+registerengineclass("explicit",        "xpl")
+registerengineclass("imaginary",       "img")
+registerengineclass("differential",    "dif")
+registerengineclass("exponential",     "exp")
+registerengineclass("ellipsis",        "ell")
+registerengineclass("function",        "fnc")
+registerengineclass("digit",           "dig")
 local division_class =
-registerengineclass("division",    "div")
-registerengineclass("factorial",   "fac")
-registerengineclass("wrapped",     "wra")
-registerengineclass("construct",   "con")
-registerengineclass("dimension",   "dim")
+registerengineclass("division",        "div")
+registerengineclass("factorial",       "fac")
+registerengineclass("wrapped",         "wra")
+registerengineclass("construct",       "con")
+registerengineclass("dimension",       "dim")
+registerengineclass("unary",           "una")
+registerengineclass("textpunctuation", "tpu")
+registerengineclass("unspaced")
+registerengineclass("experimental")
+registerengineclass("fake")
 
-classes["begin"] = 62  classnames[62] = "begin"
-classes["end"]   = 63  classnames[63] = "end"
+registerengineclass("maybeordinary")
+registerengineclass("mayberelation")
+registerengineclass("maybebinary")
+
+local specialclasses = tex.specialmathclasscodes
+
+classes["all"]   = specialclasses["all"]    classnames[specialclasses["all"]  ] = "all"
+classes["begin"] = specialclasses["begin"]  classnames[specialclasses["begin"]] = "begin"
+classes["end"]   = specialclasses["end"]    classnames[specialclasses["end"]  ] = "end"
 
 callback.register("get_noad_class", function(n) return classnames[n] end)
 
-local function registerprivateclass(name)
-    local class = classes[name]
+local function registerprivateclass(name,parent)
+    local class = parent and classes[parent] or classes[name]
     if not class then
         lastprivateclass = lastprivateclass + 1
         class = lastprivateclass
@@ -168,19 +410,22 @@ implement {
     actions   = registerengineclass,
 }
 
-local topaccent_class  = registerprivateclass("topaccent")
-local botaccent_class  = registerprivateclass("botaccent")
-local delimiter_class  = registerprivateclass("delimiter")
-local root_class       = registerprivateclass("root")
-local prime_class      = registerprivateclass("prime")
+local topaccent_class    = registerprivateclass("topaccent")
+local bottomaccent_class = registerprivateclass("bottomaccent")
+local delimiter_class    = registerprivateclass("delimiter")
+local root_class         = registerprivateclass("root")
+local prime_class        = registerprivateclass("prime")
+
+registerprivateclass("botaccent","bottomaccent")
 
 local accents = allocate {
-    accent    = true, -- some can be both
-    topaccent = true,  [topaccent_class] = true,
-    botaccent = true,  [botaccent_class] = true,
-    under     = true,  [under_class]     = true,
-    over      = true,  [over_class]      = true,
-    unknown   = false,
+    accent       = true, -- some can be both
+    topaccent    = true,  [topaccent_class]    = true,
+    bottomaccent = true,  [bottomaccent_class] = true,
+    botaccent    = true,
+    under        = true,  [under_class]        = true,
+    over         = true,  [over_class]         = true,
+    unknown      = false,
 }
 
 local integer_value = tokens.values.integer
@@ -260,7 +505,10 @@ mathematics.virtualized   = virtualized
 
 do
 
-    local setmathcharacter = function(class,family,slot,unicode,mset,dset)
+    local registercharacter = mathematics.dictionaries.registercharacter
+    local groupnames        = mathematics.dictionaries.names
+
+    local setmathcharacter = function(class,family,slot,unicode,mset,dset,group)
         if mset and class ~= ordinary_class then
             setmathcode("global",slot,class,family,unicode)
             mset = false
@@ -268,6 +516,14 @@ do
         if dset and (class == open_class or class == close_class or class == middle_class or class == division_class) then
             setdelcode("global",slot,family,unicode,0,0)
             dset = false
+        end
+        if group then
+            group = groupnames[group] or 0
+            if group ~= 0 then
+                -- which one
+                registercharacter(group,unicode,nil,class)
+             -- registercharacter(group,slot,nil,class)
+            end
         end
         return mset, dset
     end
@@ -283,28 +539,29 @@ do
         end
     end
 
-    local f_accent         = formatters[ [[\defUmathtopaccent \%s{%X}{%X}{%X}]] ]
-    local f_fixedtopaccent = formatters[ [[\defUmathfixedtopaccent \%s{%X}{%X}{%X}]] ]
-    local f_fixedbotaccent = formatters[ [[\defUmathfixedbotaccent \%s{%X}{%X}{%X}]] ]
-    local f_topaccent      = formatters[ [[\defUmathtopaccent \%s{%X}{%X}{%X}]] ]
-    local f_botaccent      = formatters[ [[\defUmathbotaccent \%s{%X}{%X}{%X}]] ]
-    local f_over           = formatters[ [[\defUdelimiterover \%s{%X}{%X}{%X}]] ]
-    local f_under          = formatters[ [[\defUdelimiterunder\%s{%X}{%X}{%X}]] ]
-    local f_fence          = formatters[ [[\defUdelimiter \%s{%X}{%X}{%X}]] ]
-    local f_delimiter      = formatters[ [[\defUdelimiter \%s{%X}{%X}{%X}]] ]
-    local f_radical        = formatters[ [[\defUradical \%s{%X}{%X}]]     ]
-    local f_root           = formatters[ [[\defUroot \%s{%X}{%X}]]     ]
-    local f_char           = formatters[ [[\defUmathchar \%s{%X}{%X}{%X}]] ]
+    local f_accent            = formatters[ [[\defUmathtopaccent \%s{%X}{%X}{%X}]] ]
+    local f_fixedtopaccent    = formatters[ [[\defUmathfixedtopaccent \%s{%X}{%X}{%X}]] ]
+    local f_fixedbottomaccent = formatters[ [[\defUmathfixedbottomaccent \%s{%X}{%X}{%X}]] ]
+    local f_topaccent         = formatters[ [[\defUmathtopaccent \%s{%X}{%X}{%X}]] ]
+    local f_bottomaccent      = formatters[ [[\defUmathbottomaccent \%s{%X}{%X}{%X}]] ]
+    local f_over              = formatters[ [[\defUdelimiterover \%s{%X}{%X}{%X}]] ]
+    local f_under             = formatters[ [[\defUdelimiterunder\%s{%X}{%X}{%X}]] ]
+    local f_fence             = formatters[ [[\defUdelimiter \%s{%X}{%X}{%X}]] ]
+    local f_delimiter         = formatters[ [[\defUdelimiter \%s{%X}{%X}{%X}]] ]
+    local f_radical           = formatters[ [[\defUradical \%s{%X}{%X}]]     ]
+    local f_root              = formatters[ [[\defUroot \%s{%X}{%X}]]     ]
+    local f_char              = formatters[ [[\defUmathchar \%s{%X}{%X}{%X}]] ]
 
     local texmathchardef = tex.mathchardef
 
-    local setmathsymbol = function(name,class,engine,family,slot,stretch) -- hex is nicer for tracing
+    local setmathsymbol = function(name,class,engine,family,slot,stretch,group) -- hex is nicer for tracing
         if class == accent_class then
             ctx_sprint(f_topaccent(name,0,family,slot))
         elseif class == topaccent_class then
+            -- only widegrave widehat widetilde : still needed?
             ctx_sprint((stretch and f_topaccent or f_fixedtopaccent)(name,0,family,slot))
-        elseif class == botaccent_class then
-            ctx_sprint((stretch and f_botaccent or f_fixedbotaccent)(name,0,family,slot))
+        elseif class == bottomaccent_class then
+            ctx_sprint((stretch and f_bottomaccent or f_fixedbottomaccent)(name,0,family,slot))
         elseif class == over_class then
             ctx_sprint(f_over(name,0,family,slot))
         elseif class == under_class then
@@ -320,6 +577,13 @@ do
         elseif class == root_class then
             ctx_sprint(f_root(name,family,slot))
         elseif texmathchardef then
+            if group then
+                group = groupnames[group] or 0
+                if group ~= 0 then
+                    texmathchardef(name,engine,family,slot,"permanent",0x1,group,slot)
+                    return
+                end
+            end
             texmathchardef(name,engine,family,slot,"permanent")
         else
             -- beware, open/close and other specials should not end up here
@@ -357,7 +621,7 @@ do
                     if trace_defining then
                         report(class,engine,family,unicode,symbol)
                     end
-                    mset, dset = setmathcharacter(engine,family,unicode,symbol,mset,dset)
+                    mset, dset = setmathcharacter(engine,family,unicode,symbol,mset,dset,group)
                 end
                 local spec = other.mathspec
                 if spec then
@@ -367,7 +631,7 @@ do
                         if class then
                             local engine = toengineclass(class)
                             -- todo: trace
-                            mset, dset = setmathcharacter(engine,family,unicode,symbol,mset,dset)
+                            mset, dset = setmathcharacter(engine,family,unicode,symbol,mset,dset,group)
                         end
                     end
                 end
@@ -376,6 +640,7 @@ do
             local spec    = character.mathspec
             local name    = character.mathname
             local stretch = character.mathstretch
+            local group   = character.mathgroup
             if spec then
                 local done = false
                 if class then
@@ -388,14 +653,16 @@ do
                         if trace_defining then
                             report(class,engine,family,unicode)
                         end
-                        mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset)
+                        mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset,group)
                         done = true
                     end
                 end
                 for i=1,#spec do
-                    local m     = spec[i]
-                    local name  = m.name
-                    local class = m.class or class
+                    local m       = spec[i]
+                    local name    = m.name
+                    local class   = m.class   or class
+                    local group   = m.group   or group
+                    local stretch = m.stretch or stretch
                     if class then
                         class = classes[class] or ordinary_class
                     else
@@ -407,7 +674,7 @@ do
                             if trace_defining then
                                 report(class,engine,family,unicode,name)
                             end
-                            setmathsymbol(name,class,engine,family,unicode,stretch)
+                            setmathsymbol(name,class,engine,family,unicode,stretch,group)
                         else
                             name = (class == classes.ordinary or class == classes.digit) and character.adobename -- bad
                             if name and trace_defining then
@@ -415,7 +682,7 @@ do
                             end
                         end
                         if not done then
-                            mset, dset = setmathcharacter(engine,family,unicode,m.unicode or unicode,mset,dset) -- see solidus
+                            mset, dset = setmathcharacter(engine,family,unicode,m.unicode or unicode,mset,dset,group) -- see solidus
                             done = true
                         end
                     end
@@ -432,7 +699,7 @@ do
                         if trace_defining then
                             report(class,engine,family,unicode,name)
                         end
-                        mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset)
+                        mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset,group)
                     else
                      -- if not name then
                      --     name = character.contextname -- too dangerous, we loose textslash and a few more
@@ -441,20 +708,20 @@ do
                             if trace_defining then
                                 report(class,engine,family,unicode,name)
                             end
-                            setmathsymbol(name,class,engine,family,unicode,stretch)
+                            setmathsymbol(name,class,engine,family,unicode,stretch,group)
                         else
                             if trace_defining then
                                 report(class,engine,family,unicode,character.adobename)
                             end
                         end
-                        mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset)
+                        mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset,group)
                     end
                 elseif class ~= ordinary_class then
                     local engine = toengineclass(class)
                     if trace_defining then
                         report(class,engine,family,unicode,character.adobename)
                     end
-                    mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset)
+                    mset, dset = setmathcharacter(engine,family,unicode,unicode,mset,dset,group)
                 end
             end
         end
@@ -651,7 +918,7 @@ do
         name      = "utfmathcommandbelow",
         public    = true,
         actions   = { utfmathcommand, context },
-        arguments = { "argument", false, "'botaccent'","'under'" }
+        arguments = { "argument", false, "'bottomaccent'","'under'" }
     }
 
     implement {
@@ -674,7 +941,7 @@ do
         name      = "doifelseutfmathbelow",
         public    = true,
         actions   = { utfmathaccent, ctx_doifelsesomething },
-        arguments = { "argument", false, "'botaccent'", "'under'" }
+        arguments = { "argument", false, "'bottomaccent'", "'under'" }
     }
 
     implement {

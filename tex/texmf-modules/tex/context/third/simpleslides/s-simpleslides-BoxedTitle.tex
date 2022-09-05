@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-BoxedTitle,
-%D        version=2009.10.04
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- FramedTitle style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -11,7 +11,7 @@
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{BoxedTitle} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading style BoxedTitle}
 
@@ -24,9 +24,9 @@
 \setuplayout [width=fit,
               margin=0cm,
               height=fit,
-              header=0cm, 
-              footer=0cm, 
-              topspace=1.35cm, 
+              header=0cm,
+              footer=0cm,
+              topspace=1.35cm,
               backspace=1cm,
               location=singlesided]
 
@@ -65,14 +65,14 @@
   linear_shade(p,6,\MPcolor{simpleslides:variantcolor},\MPcolor{simpleslides:contrastcolor}) ;
 \stopuniqueMPgraphic
 
-\startuniqueMPgraphic{simpleslides:MP:horizontal} 
+\startuniqueMPgraphic{simpleslides:MP:horizontal}
 StartPage ;
 save q ; path q ;
 q = unitsquare xscaled \overlaywidth yscaled \overlayheight smoothed 7mm ;
 fill Page withcolor black ;
 fill q withcolor \MPcolor{simpleslides:backgroundcolor} ;
 StopPage ;
-\stopuniqueMPgraphic 
+\stopuniqueMPgraphic
 
 \startuseMPgraphic{simpleslides:MP:ornament}
 StartPage ;
@@ -96,7 +96,7 @@ z.b1 = z5 ;
 for i = 2 upto (NOfPages + 1):
   z.a[i] = z.a[(i - 1)] shifted (a,0) ;
   z.b[i] = z.b[(i - 1)] shifted (a,0) ;
-  for k = 2 upto (PageNumber + 1) :
+  for k = 2 upto (RealPageNumber + 1) :
     z.a[k] = z.a[(k - 1)] shifted (a,0) ;
     z.b[k] = z.b[(k - 1)] shifted (a,0) ;
     path q[] ;
@@ -115,24 +115,24 @@ save p ; path p ;
 p = unitsquare xyscaled(0.4cm,0.4cm) ;
 circular_shade(p,0,\MPcolor{simpleslides:contrastcolor},\MPcolor{simpleslides:variantcolor}) ;
 \stopuniqueMPgraphic
- 
+
 %D We define these backgrounds as overlays:
 
-\defineoverlay 
-  [simpleslides:background:horizontal] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:horizontal]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:vertical] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:vertical]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:horizontal}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:horizontal}]
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:ornament]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 \defineoverlay
   [BoxedTitle:Title]
@@ -158,7 +158,7 @@ circular_shade(p,0,\MPcolor{simpleslides:contrastcolor},\MPcolor{simpleslides:va
    \c!title\c!align=,%\v!middle,
    \c!author\c!style=,
    \c!author\c!color=simpleslides:backgroundcolor,
-   \c!author\c!align=,%\v!middle, 
+   \c!author\c!align=,%\v!middle,
    \c!date\c!style=,
    \c!date\c!color=simpleslides:backgroundcolor,
    \c!date\c!align=,%\v!middle,
@@ -184,7 +184,7 @@ circular_shade(p,0,\MPcolor{simpleslides:contrastcolor},\MPcolor{simpleslides:va
 \setupPicture[verticalbackground=BoxedTitle:Title,
 	      verticalforegroundcolor=simpleslides:backgroundcolor]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\uniqueMPgraphic{FilledSquare}]
 \setupitemize[1][color=simpleslides:variantcolor]
@@ -193,4 +193,3 @@ circular_shade(p,0,\MPcolor{simpleslides:contrastcolor},\MPcolor{simpleslides:va
 \stopmodule
 
 \endinput
-

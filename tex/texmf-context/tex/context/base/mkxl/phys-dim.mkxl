@@ -170,16 +170,11 @@
 \permanent\protected\def\digitstextbinop#1% assumes preceding
   {\ifmmode#1\else\fourperemspace\nobreak#1\fourperemspace\fi}
 
-%frozen\def\digitstimessymbol{\ifmmode\cdot\else\digitstextbinop\cdot\fi}
 \frozen\def\digitstimessymbol{\digitstextbinop\times}
 
 \frozen\protected\def\digitszeropadding   {\hphantom{0}}
-%frozen\protected\def\digitsnegative      {\phys_digits_normalized{0}{\phys_digits_raised{\textminus}}}
-%frozen\protected\def\digitspositive      {\phys_digits_normalized{0}{\phys_digits_raised{\textplus}}}
 \frozen\protected\def\digitsnegative      {\phys_digits_normalized{0}{\mathematics{\negative}}}
 \frozen\protected\def\digitspositive      {\phys_digits_normalized{0}{\mathematics{\positive}}}
-%frozen\protected\def\digitsminus         {\phys_digits_normalized{0}{\mathematics{-}}}
-%frozen\protected\def\digitsplus          {\phys_digits_normalized{0}{\mathematics{+}}}
 \frozen\protected\def\digitsminus         {\phys_digits_normalized{0}{\mathminus}}
 \frozen\protected\def\digitsplus          {\phys_digits_normalized{0}{\mathplus}}
 \frozen\protected\def\digitsplusminus     {\phys_digits_normalized{0}{\mathplusminus}}
@@ -406,9 +401,20 @@
 \permanent\protected\def\installunitsspace#1#2%
   {\defcsname\??unitspace#1\endcsname{#2}}
 
+% \protected\def\phys_units_space
+%   {\unskip % weird, why is unskip needed
+%    \ifcsname\??unitspace\unitparameter\c!space\endcsname\lastnamedcs\else\unitsmediumspace\fi}
+
+% \im{1 \unit{hour} 20 \unit{minute} 56 \unit{second}}
+% \im{\unit{1 hour} \unit{20 minute} 56 \unit{second}}
+
 \protected\def\phys_units_space
-  {\unskip % weird, why is unskip needed
-   \ifcsname\??unitspace\unitparameter\c!space\endcsname\lastnamedcs\else\unitsmediumspace\fi}
+  {\ifmmode
+     % let the atoms do the work
+   \else
+     \unskip % weird, why is unskip needed
+     \ifcsname\??unitspace\unitparameter\c!space\endcsname\lastnamedcs\else\unitsmediumspace\fi
+   \fi}
 
 \installunitsspace\v!normal{\unitsmediumspace}
 \installunitsspace\v!big   {\unitsbigspace}
@@ -444,15 +450,14 @@
 %    \the\everyunits
   %\removeunwantedspaces % not ok yet
    \useunitstyleandcolor\c!style\c!color
-   \edef\scratchstringone{\unitparameter\c!alternative}%
    \ifmmode
-     \ifx\scratchstringone\v!text
+     \ifcstok{\unitparameter\c!alternative}\v!text
        \expandafter\expandafter\expandafter\phys_units_direct_text_in_math
      \else
        \expandafter\expandafter\expandafter\phys_units_direct_math
      \fi
    \else
-     \ifx\scratchstringone\v!mathematics
+     \ifcstok{\unitparameter\c!alternative}\v!mathematics
        \expandafter\expandafter\expandafter\phys_units_direct_math_in_text
      \else
        \expandafter\expandafter\expandafter\phys_units_direct_text
@@ -609,36 +614,12 @@
 \permanent\protected\def\unitsN#1%
   {\unitsNstart#1\unitsNstop}
 
-% \def\phys_units_start
-%   {\ifmmode
-%      \dostarttagged\t!maction\t!unit
-%      \bgroup % make an mrow
-%    \else
-%      \dostarttagged\t!unit\empty
-%    \fi
-%    \let\phys_units_finish\phys_units_stop
-%    \let\phys_units_start\relax}
-%
-% \def\phys_units_stop
-%   {\ifconditional\c_phys_units_number
-%      \setfalse\c_phys_units_number
-%      \dostoptagged
-%    \fi
-%    \ifconditional\c_phys_units_quantity
-%      \setfalse\c_phys_units_quantity
-%      \dostoptagged
-%    \fi
-%    \dostoptagged
-%    \ifmmode
-%      \egroup
-%    \fi}
-
 \def\phys_units_start
   {\ifmmode
      \dostarttagged\t!maction\t!unit
      \mathatom
         \s!leftclass  \mathdimensioncode
-        \s!rightclass \mathordinarycode
+        \s!rightclass \mathdimensioncode
      \bgroup
    \else
      \dostarttagged\t!unit\empty

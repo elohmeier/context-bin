@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-NarrowStripes,
-%D        version=2009.03.30
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module NarrowStripes,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -27,10 +27,10 @@
 	      rightmargin=0cm,
               leftmargindistance=1.8cm,
               rightmargindistance=0pt,
-              height=fit, 
-              header=2.5cm, 
-              footer=0cm, 
-              topspace=.4cm, 
+              height=fit,
+              header=2.5cm,
+              footer=0cm,
+              topspace=.4cm,
               backspace=3.2cm,
 	      cutspace=3.7cm,
               bottomspace=0cm,
@@ -127,8 +127,8 @@ linear_shade(p[2],2,
 
 fill p[3] withcolor \MPcolor{simpleslides:variantcolor} ;
 
-if PageNumber > 1:
-	draw \sometxt[simpleslides:sometxt:text]{\folio} shifted (0,PaperHeight-a) ;
+if RealPageNumber > 1:
+	draw \sometxt[simpleslides:sometxt:text]{\pagenumber} shifted (0,PaperHeight-a) ;
 fi ;
 StopPage ;
 \stopuseMPgraphic
@@ -137,9 +137,9 @@ StopPage ;
   [simpleslides:background:ornament]
   [\useMPgraphic{simpleslides:MP:ornament}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:ornament}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:ornament}]
 
 %D this sets up the title page:
 
@@ -158,7 +158,7 @@ StopPage ;
    \c!height=2.25cm,
    \c!after=]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \definesymbol[1][\useMPgraphic{simpleslides:itemize:square}]
 \setupitemize[1][inmargin][color={simpleslides:itemize:color}]
@@ -167,4 +167,3 @@ StopPage ;
 \stopmodule
 
 \endinput
-

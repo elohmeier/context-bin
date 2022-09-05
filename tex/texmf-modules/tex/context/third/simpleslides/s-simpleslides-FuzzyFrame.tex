@@ -1,6 +1,6 @@
 %D \module
 %D   [      file=simpleslides-s-SideToc,
-%D        version=2010.02.09,
+%D        version=2022.07.13,
 %D          title=\CONTEXT\ Style File,
 %D       subtitle=Presentation Module --- SideToc style,
 %D         author=Aditya Mahajan and Thomas A. Schmitz,
@@ -11,7 +11,7 @@
 %C This file may be distributed under the GNU General Public License v. 2.0.
 
 %D This file provides the \quotation{SideToc} style for the presentation
-%D module. It is loaded at runtime. 
+%D module. It is loaded at runtime.
 
 \writestatus{simpleslides}{loading Fuzzy Frame style}
 
@@ -25,12 +25,12 @@
 \setuplayout  [simpleslides:layout:vertical]
 	      [leftmargin=0cm,
 	      rightmargin=0cm,
-              header=0.1cm, 
+              header=0.1cm,
 	      headerdistance=1.7cm,
-              header=0cm, 
+              header=0cm,
 	      headerdistance=0cm,
-              footer=0cm, 
-              topspace=1cm, 
+              footer=0cm,
+              topspace=1cm,
               backspace=1cm,
               bottomspace=0cm,
               bottom=0pt,
@@ -40,11 +40,11 @@
 	      [width=fit,
               leftmargin=0cm,
 	      rightmargin=0cm,
-              height=fit, 
-              header=0.1cm, 
+              height=fit,
+              header=0.1cm,
 	      headerdistance=1.7cm,
-              footer=0cm, 
-              topspace=1cm, 
+              footer=0cm,
+              topspace=1cm,
               backspace=1cm,
               bottomspace=0cm,
               bottom=0pt,
@@ -54,11 +54,11 @@
 	      [width=fit,
               leftmargin=0cm,
 	      rightmargin=0cm,
-              height=fit, 
-              header=0cm, 
+              height=fit,
+              header=0cm,
 	      headerdistance=0cm,
-              footer=0cm, 
-              topspace=1cm, 
+              footer=0cm,
+              topspace=1cm,
               backspace=1cm,
               bottomspace=0cm,
               bottom=0pt,
@@ -141,10 +141,10 @@ z[2] = z[1] shifted (0, d) ;
 save p ; path p[] ;
 p[1] = z[1] -- z[2] ;
 pickup pencircle scaled 0.5pt ;
-r = 150*(PageNumber/NOfPages) ;
+r = 150*(RealPageNumber/NOfPages) ;
 z[3] = z[1] shifted (r, -4pt) ;
 for i=1 upto 150 :
- draw p[1] shifted (i*s/150, 0) randomized 2pt withcolor 
+ draw p[1] shifted (i*s/150, 0) randomized 2pt withcolor
  (if i < r : \MPcolor{simpleslides:contrastcolor}
       else : \MPcolor{simpleslides:altcontrastcolor}
       fi) ;
@@ -153,7 +153,7 @@ StopPage ;
 \stopuseMPgraphic
 
 \startuseMPgraphic{simpleslides:MP:ornament}
-StartPage ; 
+StartPage ;
 save v, s, l, r ; numeric v, s, l, r ;
 save p ; path p ;
 v = 0.8cm ;
@@ -161,10 +161,10 @@ s = 0.33*PaperWidth ;
 z[1] = (0,0) shifted (s,v) ;
 z[2] = (PaperWidth,0) shifted (-s,v) ;
 l = arclength (z[1] --z[2]) ;
-r = (l*PageNumber/NOfPages) ;
+r = (l*RealPageNumber/NOfPages) ;
 z[3] = z[1] shifted (-5mm, -3mm) ;
 z[4] = z[1] shifted (-5mm, 3mm) ;
-if PageNumber = NOfPages :
+if RealPageNumber = NOfPages :
  z[5] = z[1] shifted (r+5mm,-3mm) ;
  z[6] = z[1] shifted (r+5mm,3mm) ;
 else:
@@ -178,7 +178,7 @@ pickup pencircle scaled .5pt ;
   draw p randomized 12pt withcolor \MPcolor{simpleslides:altcontrastcolor} ;
  endfor ;
 picture old ; old := currentpicture ;
-clip old to z[3] -- z[4] -- z[6] -- z[5] -- cycle ; 
+clip old to z[3] -- z[4] -- z[6] -- z[5] -- cycle ;
 draw old withcolor \MPcolor{simpleslides:contrastcolor} ;
 StopPage ;
 \stopuseMPgraphic
@@ -193,15 +193,15 @@ StopPage ;
   [simpleslides:background:vertical]
   [\useMPgraphic{simpleslides:MP:vertical}]
 
-\defineoverlay 
-  [simpleslides:background:title] 
-  [\useMPgraphic{simpleslides:MP:title}] 
+\defineoverlay
+  [simpleslides:background:title]
+  [\useMPgraphic{simpleslides:MP:title}]
 
-\defineoverlay 
-  [simpleslides:background:ornament] 
+\defineoverlay
+  [simpleslides:background:ornament]
   [\useMPgraphic{simpleslides:MP:ornament2}]
 
-%D We want the title to placed in color. 
+%D We want the title to placed in color.
 
 \setupTitle
   [\c!title=,
@@ -217,7 +217,7 @@ StopPage ;
    \c!title\c!align=\v!middle,
    \c!author\c!style=,
    \c!author\c!color={simpleslides:contrastcolor},
-   \c!author\c!align=\v!middle, 
+   \c!author\c!align=\v!middle,
    \c!date\c!style=,
    \c!date\c!color={simpleslides:contrastcolor},
    \c!date\c!align=\v!middle,
@@ -237,7 +237,7 @@ StopPage ;
     \c!height=2.5cm,
     \c!color=black]
 
-%D The symbol for the first level of itemizations. 
+%D The symbol for the first level of itemizations.
 
 \startuseMPgraphic{simpleslides:itemize:square}
 save p ; path p[] ;
